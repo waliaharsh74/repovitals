@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  reports  AnalysisReport[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Repository {
+  id            String   @id @default(cuid())
+  owner         String
+  name          String
+  url           String
+  defaultBranch String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  reports AnalysisReport[]
+
+  @@unique([owner, name])
+}
+
+model AnalysisReport {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id])
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  provider String
+  status   String
+
+  summary             String?
+  scorecardJson       Json?
+  mermaidDiagram      String?
+  recommendationsJson Json?
+  agentTraceJson      Json?
+  selectedFilesJson   Json?
+
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  findings Finding[]
+
+  @@index([userId])
+}
+
+model Finding {
+  id       String         @id @default(cuid())
+  reportId String
+  report   AnalysisReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  title      String
+  category   String
+  severity   String
+  confidence Float
+
+  filePath String?
+  lineHint Int?
+
+  explanation    String
+  recommendation String
+  suggestedPatch String?
+
+  createdAt DateTime @default(now())
+}
