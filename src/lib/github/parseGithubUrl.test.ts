@@ -7,11 +7,13 @@ describe("parseGithubUrl", () => {
     ["https://github.com/vercel/next.js/", "vercel", "next.js"],
     ["github.com/vercel/next.js", "vercel", "next.js"],
     ["vercel/next.js", "vercel", "next.js"],
+    ["https://octo.ghe.com/acme/private-repo", "acme", "private-repo"],
   ])("parses %s", (input, owner, repo) => {
     expect(parseGithubUrl(input)).toEqual({
       owner,
       repo,
-      normalizedUrl: `https://github.com/${owner}/${repo}`,
+      host: input.startsWith("https://octo.ghe.com") ? "octo.ghe.com" : "github.com",
+      normalizedUrl: input.startsWith("https://octo.ghe.com") ? `https://octo.ghe.com/${owner}/${repo}` : `https://github.com/${owner}/${repo}`,
     });
   });
 

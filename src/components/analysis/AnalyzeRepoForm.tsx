@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Github, SearchCode } from "lucide-react";
@@ -20,6 +20,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+type GithubRepoOption = {
+  id: number;
+  fullName: string;
+  private: boolean;
+  url: string;
+};
+
 type ApiError = {
   error?: {
     code: string;
@@ -31,7 +38,10 @@ type ApiError = {
 export function AnalyzeRepoForm() {
   const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [connectGithubPrompt, setConnectGithubPrompt] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [repoOptions, setRepoOptions] = useState<GithubRepoOption[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
   const [workflowSteps, setWorkflowSteps] = useState<AnalysisWorkflowStepState[]>(
     createInitialWorkflowSteps,
   );
@@ -46,7 +56,30 @@ export function AnalyzeRepoForm() {
     },
   });
 
+  const connectGithubUrl = useMemo(() => {
+    const repoUrl = form.getValues("repoUrl");
+    return `/api/github/install?repoUrl=${encodeURIComponent(repoUrl)}`;
+  }, [form]);
+
   const isSubmitting = form.formState.isSubmitting;
+
+  useEffect(() => {
+    async function loadRepos() {
+      setReposLoading(true);
+      try {
+        const response = await fetch("/api/github/repos", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { repositories?: GithubRepoOption[] };
+        if (payload.repositories) {
+          setRepoOptions(payload.repositories);
+        }
+      } finally {
+        setReposLoading(false);
+      }
+    }
+
+    loadRepos();
+  }, []);
 
   function applyProgressEvent(event: AnalysisProgressEvent) {
     if (event.type === "progress") {
@@ -81,6 +114,7 @@ export function AnalyzeRepoForm() {
 
     if (!response.ok) {
       setStatusMessage(null);
+      setConnectGithubPrompt(payload.error?.code === "GITHUB_APP_INSTALLATION_REQUIRED");
       setSubmitError(payload.error?.message ?? "Analysis failed. Check the inputs and try again.");
       return;
     }
@@ -127,6 +161,7 @@ export function AnalyzeRepoForm() {
 
   async function onSubmit(values: AnalyzeInput) {
     setSubmitError(null);
+    setConnectGithubPrompt(false);
     setStatusMessage("Validating request...");
     setWorkflowSteps(createInitialWorkflowSteps());
     setShowWorkflow(true);
@@ -159,8 +194,10 @@ export function AnalyzeRepoForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Analyze a public repository</CardTitle>
-        <CardDescription>Use a provider key for this one run. RepoVitals does not persist it.</CardDescription>
+        <CardTitle>Analyze a repository</CardTitle>
+        <CardDescription>
+          Paste any repo URL. If it is private, RepoVitals will guide you to connect GitHub App access.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
@@ -181,7 +218,7 @@ export function AnalyzeRepoForm() {
           />
           {form.formState.errors.apiKey ? (
             <p className="text-sm text-destructive">{form.formState.errors.apiKey.message}</p>
-            ) : null}
+          ) : null}
 
           <Controller
             control={form.control}
@@ -207,6 +244,27 @@ export function AnalyzeRepoForm() {
           />
 
           <div className="space-y-2">
+            <Label htmlFor="repoPicker">Your GitHub repositories</Label>
+            <select
+              id="repoPicker"
+              className="w-full rounded-md border bg-background p-2 text-sm"
+              disabled={isSubmitting || reposLoading || repoOptions.length === 0}
+              onChange={(event) => {
+                if (event.target.value) {
+                  form.setValue("repoUrl", event.target.value, { shouldValidate: true });
+                }
+              }}
+            >
+              <option value="">{reposLoading ? "Loading repositories..." : "Select a repository (optional)"}</option>
+              {repoOptions.map((repo) => (
+                <option key={repo.id} value={repo.url}>
+                  {repo.fullName}{repo.private ? " (private)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="repoUrl">GitHub repository</Label>
             <div className="relative">
               <Github className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -227,6 +285,15 @@ export function AnalyzeRepoForm() {
             status={submitError ? "error" : isSubmitting ? "running" : statusMessage ? "success" : "idle"}
             message={submitError ?? statusMessage ?? undefined}
           />
+
+          {connectGithubPrompt ? (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="mb-2">This repository is private. Connect GitHub App access and then retry.</p>
+              <Button asChild type="button" variant="outline">
+                <a href={connectGithubUrl}>Connect GitHub App</a>
+              </Button>
+            </div>
+          ) : null}
 
           <AnalysisWorkflow steps={workflowSteps} visible={showWorkflow} />
 

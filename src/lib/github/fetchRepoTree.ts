@@ -1,3 +1,4 @@
+import { resolveGithubAuth } from "@/lib/github/auth";
 import { fetchGitTree, fetchRepoMetadata, type GithubTreeItem } from "@/lib/github/githubClient";
 
 export type RepoTreeResult = {
@@ -9,9 +10,17 @@ export type RepoTreeResult = {
   truncated: boolean;
 };
 
-export async function fetchRepoTree(owner: string, repo: string): Promise<RepoTreeResult> {
-  const metadata = await fetchRepoMetadata(owner, repo);
-  const tree = await fetchGitTree(metadata.owner, metadata.name, metadata.defaultBranch);
+export async function fetchRepoTree(
+  owner: string,
+  repo: string,
+  options?: { installationToken?: string; installationId?: string },
+): Promise<RepoTreeResult> {
+  const auth = resolveGithubAuth({
+    installationToken: options?.installationToken,
+    installationId: options?.installationId,
+  });
+  const metadata = await fetchRepoMetadata(owner, repo, auth);
+  const tree = await fetchGitTree(metadata.owner, metadata.name, metadata.defaultBranch, auth);
 
   return {
     owner: metadata.owner,

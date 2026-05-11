@@ -19,6 +19,25 @@ model User {
   accounts Account[]
   sessions Session[]
   reports  AnalysisReport[]
+  githubInstallations GithubInstallation[]
+}
+
+model GithubInstallation {
+  id                  String   @id @default(cuid())
+  userId              String
+  githubAccountId     String
+  installationId      String
+  login               String
+  targetType          String
+  avatarUrl           String?
+  grantedRepositories Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([userId, installationId])
 }
 
 model Account {

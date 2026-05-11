@@ -1,10 +1,13 @@
-import { AppError, GithubRateLimitError } from "@/lib/utils/errors";
+import { resolveGithubAuth } from "@/lib/github/auth";
+import { AppError, GithubAccessDeniedError, GithubInstallationRequiredError, GithubRateLimitError } from "@/lib/utils/errors";
 
 type FetchFileContentInput = {
   owner: string;
   repo: string;
   branch: string;
   path: string;
+  installationToken?: string;
+  installationId?: string;
 };
 
 export async function fetchFileContent(input: FetchFileContentInput): Promise<string> {
@@ -13,18 +16,31 @@ export async function fetchFileContent(input: FetchFileContentInput): Promise<st
     input.repo,
   )}/${encodeURIComponent(input.branch)}/${encodedPath}`;
 
+  const auth = resolveGithubAuth({
+    installationToken: input.installationToken,
+    installationId: input.installationId,
+  });
+
   const headers: HeadersInit = {
     "User-Agent": "RepoVitals-MVP",
   };
 
-  if (process.env.GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  if (auth.mode !== "none") {
+    headers.Authorization = `Bearer ${auth.token}`;
   }
 
   const response = await fetch(url, { headers });
 
   if (response.status === 403 || response.status === 429) {
     throw new GithubRateLimitError();
+  }
+
+  if (response.status === 404 && auth.mode === "installation") {
+    throw new GithubInstallationRequiredError();
+  }
+
+  if (response.status === 403) {
+    throw new GithubAccessDeniedError();
   }
 
   if (!response.ok) {

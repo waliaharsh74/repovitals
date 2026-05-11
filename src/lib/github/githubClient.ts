@@ -1,13 +1,17 @@
 import {
+  GithubAccessDeniedError,
+  GithubInstallationRequiredError,
   GithubRateLimitError,
   GithubRepoNotFoundError,
   AppError,
 } from "@/lib/utils/errors";
+import type { GithubAuthMode } from "@/lib/github/auth";
 
 const GITHUB_API_BASE = "https://api.github.com";
 
 type RequestOptions = {
   headers?: HeadersInit;
+  auth?: GithubAuthMode;
 };
 
 export type GithubRepoMetadata = {
@@ -32,38 +36,47 @@ export type GithubTreeResponse = {
   tree: GithubTreeItem[];
 };
 
-function githubHeaders(): HeadersInit {
+function githubHeaders(auth?: GithubAuthMode): HeadersInit {
   const headers: HeadersInit = {
     Accept: "application/vnd.github+json",
     "User-Agent": "RepoVitals-MVP",
     "X-GitHub-Api-Version": "2022-11-28",
   };
 
-  if (process.env.GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  if (auth && auth.mode !== "none") {
+    headers.Authorization = `Bearer ${auth.token}`;
   }
 
   return headers;
+}
+
+function mapGithubPermissionError(response: Response, auth?: GithubAuthMode): never {
+  if (response.status === 404 && auth?.mode === "installation") {
+    throw new GithubInstallationRequiredError();
+  }
+
+  if (response.status === 403) {
+    throw new GithubAccessDeniedError();
+  }
+
+  throw new GithubRepoNotFoundError();
 }
 
 export async function githubFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const response = await fetch(`${GITHUB_API_BASE}${path}`, {
     ...options,
     headers: {
-      ...githubHeaders(),
+      ...githubHeaders(options.auth),
       ...options.headers,
     },
   });
 
-  if (response.status === 404) {
-    throw new GithubRepoNotFoundError();
+  if (response.status === 404 || response.status === 403) {
+    mapGithubPermissionError(response, options.auth);
   }
 
-  if (response.status === 403 || response.status === 429) {
-    const remaining = response.headers.get("x-ratelimit-remaining");
-    if (remaining === "0" || response.status === 429) {
-      throw new GithubRateLimitError();
-    }
+  if (response.status === 429) {
+    throw new GithubRateLimitError();
   }
 
   if (!response.ok) {
@@ -78,13 +91,13 @@ export async function githubFetch<T>(path: string, options: RequestOptions = {})
   return (await response.json()) as T;
 }
 
-export async function fetchRepoMetadata(owner: string, repo: string): Promise<GithubRepoMetadata> {
+export async function fetchRepoMetadata(owner: string, repo: string, auth?: GithubAuthMode): Promise<GithubRepoMetadata> {
   const data = await githubFetch<{
     name: string;
     owner: { login: string };
     default_branch: string;
     html_url: string;
-  }>(`/repos/${owner}/${repo}`);
+  }>(`/repos/${owner}/${repo}`, { auth });
 
   return {
     owner: data.owner.login,
@@ -98,8 +111,10 @@ export async function fetchGitTree(
   owner: string,
   repo: string,
   branch: string,
+  auth?: GithubAuthMode,
 ): Promise<GithubTreeResponse> {
   return githubFetch<GithubTreeResponse>(
     `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    { auth },
   );
 }

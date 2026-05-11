@@ -17,6 +17,7 @@ export const authOptions: NextAuthOptions = {
     GitHubProvider({
       clientId: envValue("GITHUB_CLIENT_ID", "AUTH_GITHUB_ID"),
       clientSecret: envValue("GITHUB_CLIENT_SECRET", "AUTH_GITHUB_SECRET"),
+      authorization: { params: { scope: "read:user repo" } },
     }),
     GoogleProvider({
       clientId: envValue("GOOGLE_CLIENT_ID", "AUTH_GOOGLE_ID"),
