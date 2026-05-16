@@ -8,6 +8,7 @@ type FetchFileContentInput = {
   path: string;
   installationToken?: string;
   installationId?: string;
+  signal?: AbortSignal;
 };
 
 export async function fetchFileContent(input: FetchFileContentInput): Promise<string> {
@@ -29,7 +30,7 @@ export async function fetchFileContent(input: FetchFileContentInput): Promise<st
     headers.Authorization = `Bearer ${auth.token}`;
   }
 
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, signal: input.signal });
 
   if (response.status === 403 || response.status === 429) {
     throw new GithubRateLimitError();

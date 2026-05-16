@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
+import { getGithubUserAccessToken, type GithubUserAccessTokenResult } from "@/lib/github/oauth";
 
 type GithubRepo = {
   id: number;
@@ -9,33 +9,51 @@ type GithubRepo = {
   html_url: string;
 };
 
+function tokenErrorResponse(result: Extract<GithubUserAccessTokenResult, { ok: false }>) {
+  return NextResponse.json(
+    {
+      error: {
+        code: result.code,
+        message: result.message,
+      },
+    },
+    { status: result.status },
+  );
+}
+
+async function fetchGithubRepos(accessToken: string) {
+  return fetch("https://api.github.com/user/repos?per_page=100&sort=updated", {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${accessToken}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "RepoVitals-MVP",
+    },
+    cache: "no-store",
+  });
+}
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: { code: "UNAUTHORIZED", message: "Sign in required." } }, { status: 401 });
   }
 
-  const account = await prisma.account.findFirst({
-    where: { userId: user.id, provider: "github" },
-    orderBy: { id: "desc" },
-  });
-
-  if (!account?.access_token) {
-    return NextResponse.json(
-      { error: { code: "GITHUB_OAUTH_REQUIRED", message: "Connect GitHub to load repositories." } },
-      { status: 400 },
-    );
+  const token = await getGithubUserAccessToken(user.id);
+  if (!token.ok) {
+    return tokenErrorResponse(token);
   }
 
-  const response = await fetch("https://api.github.com/user/repos?per_page=100&sort=updated", {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${account.access_token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "RepoVitals-MVP",
-    },
-    cache: "no-store",
-  });
+  let response = await fetchGithubRepos(token.token);
+
+  if (response.status === 401) {
+    const refreshedToken = await getGithubUserAccessToken(user.id, { forceRefresh: true });
+    if (!refreshedToken.ok) {
+      return tokenErrorResponse(refreshedToken);
+    }
+
+    response = await fetchGithubRepos(refreshedToken.token);
+  }
 
   if (response.status === 401) {
     return NextResponse.json(

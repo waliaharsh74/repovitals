@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { REPORT_OUTPUT_LIMITS } from "@/lib/ai/tokenBudget";
-import { reportSynthesisSchema } from "@/lib/agents/schemas";
+import { findingSchema, reportSynthesisSchema } from "@/lib/agents/schemas";
+
+const baseFinding = {
+  title: "Missing request timeout",
+  category: "performance",
+  severity: "medium",
+  confidence: 0.8,
+  filePath: "src/app/api/analyze/route.ts",
+  explanation: "The request path can wait indefinitely for an upstream service.",
+  recommendation: "Add a bounded timeout and expose a retryable failure to callers.",
+} as const;
 
 describe("reportSynthesisSchema", () => {
   it("caps oversized recommendation arrays instead of failing validation", () => {
@@ -48,5 +58,34 @@ describe("reportSynthesisSchema", () => {
       "Keep provider keys scoped to a single request and redact them from logs.",
       "Add integration tests for the analysis API failure paths.",
     ]);
+  });
+});
+
+describe("findingSchema", () => {
+  it("normalizes provider lineHint zero to an absent optional line hint", () => {
+    const parsed = findingSchema.parse({
+      ...baseFinding,
+      lineHint: 0,
+    });
+
+    expect(parsed.lineHint).toBeUndefined();
+  });
+
+  it("accepts positive lineHint strings from provider JSON", () => {
+    const parsed = findingSchema.parse({
+      ...baseFinding,
+      lineHint: "42",
+    });
+
+    expect(parsed.lineHint).toBe(42);
+  });
+
+  it("still rejects invalid non-numeric lineHint values", () => {
+    expect(() =>
+      findingSchema.parse({
+        ...baseFinding,
+        lineHint: "unknown",
+      }),
+    ).toThrow();
   });
 });

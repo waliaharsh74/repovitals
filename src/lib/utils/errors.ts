@@ -10,6 +10,9 @@ export type ErrorCode =
   | "PROVIDER_AUTHENTICATION"
   | "PROVIDER_RATE_LIMIT"
   | "REPO_TOO_LARGE"
+  | "QUEUE_UNAVAILABLE"
+  | "ANALYSIS_CANCELLED"
+  | "ANALYSIS_TIMEOUT"
   | "VALIDATION_ERROR"
   | "ANALYSIS_FAILED";
 
@@ -31,6 +34,9 @@ export class GithubInstallationRequiredError extends AppError { constructor(mess
 export class ProviderAuthenticationError extends AppError { constructor(message = "The provider rejected the API key. Check the key and try again.") { super("PROVIDER_AUTHENTICATION", message, 401);} }
 export class ProviderRateLimitError extends AppError { constructor(message = "The AI provider rate limit was reached. Try again later or use another provider key.") { super("PROVIDER_RATE_LIMIT", message, 429);} }
 export class RepoTooLargeError extends AppError { constructor(message = "This repository is too large for the MVP analysis limits.") { super("REPO_TOO_LARGE", message, 413);} }
+export class QueueUnavailableError extends AppError { constructor(message = "Analysis queue is unavailable. Start Redis and the worker, then try again.") { super("QUEUE_UNAVAILABLE", message, 503);} }
+export class AnalysisCancelledError extends AppError { constructor(message = "Analysis was cancelled.") { super("ANALYSIS_CANCELLED", message, 409);} }
+export class AnalysisTimeoutError extends AppError { constructor(message = "Analysis exceeded its configured timeout.") { super("ANALYSIS_TIMEOUT", message, 504);} }
 export class AnalysisFailedError extends AppError { constructor(message = "Analysis failed before a report could be completed.") { super("ANALYSIS_FAILED", message, 500);} }
 
 export function toAppError(error: unknown): AppError {

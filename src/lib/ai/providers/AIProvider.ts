@@ -6,6 +6,7 @@ export type GenerateObjectInput<TSchema extends z.ZodTypeAny> = {
   schema: TSchema;
   temperature?: number;
   maxTokens?: number;
+  signal?: AbortSignal;
 };
 
 export type GenerateTextInput = {
@@ -13,6 +14,7 @@ export type GenerateTextInput = {
   prompt: string;
   temperature?: number;
   maxTokens?: number;
+  signal?: AbortSignal;
 };
 
 export interface AIProvider {

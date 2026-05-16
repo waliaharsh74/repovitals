@@ -16,29 +16,35 @@ import { redactApiKey } from "@/lib/ai/redact";
 type GroqProviderInput = {
   apiKey: string;
   model?: string;
+  signal?: AbortSignal;
 };
 
 export class GroqProvider implements AIProvider {
   name = "groq";
   private client: Groq;
   private model: string;
+  private signal?: AbortSignal;
 
   constructor(input: GroqProviderInput) {
     this.client = new Groq({ apiKey: input.apiKey });
     this.model = input.model ?? process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
+    this.signal = input.signal;
   }
 
   async generateText(input: GenerateTextInput): Promise<string> {
     try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        temperature: input.temperature ?? 0.2,
-        max_tokens: input.maxTokens ?? 1800,
-        messages: [
-          { role: "system", content: input.system },
-          { role: "user", content: input.prompt },
-        ],
-      });
+      const response = await this.client.chat.completions.create(
+        {
+          model: this.model,
+          temperature: input.temperature ?? 0.2,
+          max_tokens: input.maxTokens ?? 1800,
+          messages: [
+            { role: "system", content: input.system },
+            { role: "user", content: input.prompt },
+          ],
+        },
+        { signal: input.signal ?? this.signal },
+      );
 
       return response.choices[0]?.message?.content ?? "";
     } catch (error) {
@@ -67,18 +73,21 @@ export class GroqProvider implements AIProvider {
           .filter(Boolean)
           .join("\n");
 
-        const response = await this.client.chat.completions.create({
-          model: this.model,
-          temperature: input.temperature ?? 0.1,
-          max_tokens: input.maxTokens ?? 2200,
-          response_format: {
-            type: "json_object",
-          } as never,
-          messages: [
-            { role: "system", content: input.system },
-            { role: "user", content: prompt },
-          ],
-        });
+        const response = await this.client.chat.completions.create(
+          {
+            model: this.model,
+            temperature: input.temperature ?? 0.1,
+            max_tokens: input.maxTokens ?? 2200,
+            response_format: {
+              type: "json_object",
+            } as never,
+            messages: [
+              { role: "system", content: input.system },
+              { role: "user", content: prompt },
+            ],
+          },
+          { signal: input.signal ?? this.signal },
+        );
 
         return parseWithSchema(input.schema, response.choices[0]?.message?.content ?? "{}");
       } catch (error) {

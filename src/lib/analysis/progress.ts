@@ -13,23 +13,49 @@ export type AnalysisWorkflowStepId =
   | "persist-report";
 
 export type AnalysisProgressStatus = "pending" | "running" | "completed" | "failed";
+export type AnalysisJobStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export type AnalysisProgressPayload = {
   step: AnalysisWorkflowStepId;
   status: Exclude<AnalysisProgressStatus, "pending">;
   message: string;
   detail?: string;
+  startedAt?: string;
+  completedAt?: string;
+  failedAt?: string;
+  updatedAt?: string;
+};
+
+export type AnalysisProgressRecord = {
+  step: AnalysisWorkflowStepId;
+  status: AnalysisProgressStatus;
+  message: string;
+  detail?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
+  updatedAt: string;
 };
 
 export type AnalysisProgressEvent =
   | ({ type: "progress" } & AnalysisProgressPayload)
   | {
+      type: "snapshot";
+      jobId: string;
+      reportId: string;
+      status: AnalysisJobStatus;
+      steps: AnalysisProgressRecord[];
+      message?: string;
+    }
+  | {
       type: "complete";
+      jobId?: string;
       reportId: string;
       message: string;
     }
   | {
       type: "error";
+      jobId?: string;
       code: string;
       message: string;
       reportId?: string;

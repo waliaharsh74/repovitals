@@ -30,13 +30,32 @@ function cappedArray<TSchema extends z.ZodTypeAny>(itemSchema: TSchema, maxItems
   return z.preprocess((value) => normalizeArrayInput(value, maxItems), z.array(itemSchema));
 }
 
+function normalizeLineHint(value: unknown): unknown {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : value;
+  }
+
+  return value;
+}
+
 export const findingSchema = z.object({
   title: z.string().min(3),
   category: z.enum(["architecture", "security", "performance", "maintainability", "testing"]),
   severity: z.enum(["critical", "high", "medium", "low"]),
   confidence: z.number().min(0).max(1),
   filePath: z.string().optional(),
-  lineHint: z.number().int().positive().optional(),
+  lineHint: z
+    .preprocess(normalizeLineHint, z.number().int().positive().optional())
+    .describe("1-based source line number. Omit when unknown; never use 0."),
   explanation: z.string().min(10),
   recommendation: z.string().min(10),
   suggestedPatch: z.string().optional(),

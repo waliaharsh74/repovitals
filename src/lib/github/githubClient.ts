@@ -12,6 +12,7 @@ const GITHUB_API_BASE = "https://api.github.com";
 type RequestOptions = {
   headers?: HeadersInit;
   auth?: GithubAuthMode;
+  signal?: AbortSignal;
 };
 
 export type GithubRepoMetadata = {
@@ -69,6 +70,7 @@ export async function githubFetch<T>(path: string, options: RequestOptions = {})
       ...githubHeaders(options.auth),
       ...options.headers,
     },
+    signal: options.signal,
   });
 
   if (response.status === 404 || response.status === 403) {
@@ -91,13 +93,18 @@ export async function githubFetch<T>(path: string, options: RequestOptions = {})
   return (await response.json()) as T;
 }
 
-export async function fetchRepoMetadata(owner: string, repo: string, auth?: GithubAuthMode): Promise<GithubRepoMetadata> {
+export async function fetchRepoMetadata(
+  owner: string,
+  repo: string,
+  auth?: GithubAuthMode,
+  signal?: AbortSignal,
+): Promise<GithubRepoMetadata> {
   const data = await githubFetch<{
     name: string;
     owner: { login: string };
     default_branch: string;
     html_url: string;
-  }>(`/repos/${owner}/${repo}`, { auth });
+  }>(`/repos/${owner}/${repo}`, { auth, signal });
 
   return {
     owner: data.owner.login,
@@ -112,9 +119,10 @@ export async function fetchGitTree(
   repo: string,
   branch: string,
   auth?: GithubAuthMode,
+  signal?: AbortSignal,
 ): Promise<GithubTreeResponse> {
   return githubFetch<GithubTreeResponse>(
     `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-    { auth },
+    { auth, signal },
   );
 }

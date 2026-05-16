@@ -26,7 +26,9 @@ Implemented:
 - OpenAI and Groq provider adapters behind `AIProvider`
 - deterministic file classifier
 - architecture, security, performance, testing, and synthesis agents
-- `/api/analyze` and `/api/reports/[reportId]`
+- Redis-backed asynchronous analysis jobs
+- SSE progress streaming for queued analysis runs
+- `/api/analyze`, `/api/analyze/jobs/[jobId]/events`, `/api/analyze/jobs/[jobId]/cancel`, and `/api/reports/[reportId]`
 - user-owned persisted report page with scorecards, findings, Mermaid diagram, recommendations, selected files, and agent trace
 - Vitest coverage for core pure functions
 
@@ -35,7 +37,6 @@ Not included in MVP:
 - private repositories
 - saved provider keys
 - payments
-- queue workers
 - WebSockets
 - GitHub issue or PR creation
 
@@ -43,12 +44,14 @@ Not included in MVP:
 
 - Node.js 22+
 - pnpm 9+
+- Docker, for local Redis
 - External PostgreSQL database URL from Neon, Supabase, Railway, local Postgres, or another provider
+- Redis, via `docker compose up -d redis` locally
 - Google OAuth app credentials
 - GitHub OAuth app credentials
 - OpenAI or Groq API key entered in the browser at analysis time
 
-Provider keys are not stored in `.env`, the database, logs, or report payloads.
+Provider keys are encrypted for the lifetime of a queued job and cleared when the job reaches a terminal state. Raw provider keys are not stored in `.env`, logs, or report payloads.
 
 OAuth callback URLs for local development:
 
@@ -69,9 +72,15 @@ Create `.env.local`:
 
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
+REDIS_URL="redis://localhost:6379"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="generate-a-random-secret"
+ANALYSIS_JOB_SECRET="generate-a-random-32-byte-analysis-job-secret"
+ANALYSIS_JOB_ATTEMPTS="3"
+ANALYSIS_JOB_BACKOFF_MS="15000"
+ANALYSIS_JOB_TIMEOUT_MS="900000"
+ANALYSIS_QUEUE_CONCURRENCY="1"
 
 # OAuth login providers
 GITHUB_CLIENT_ID=""
@@ -94,10 +103,12 @@ pnpm prisma generate
 pnpm prisma migrate dev
 ```
 
-Start the app:
+Start Redis, the app, and the analysis worker:
 
 ```bash
+pnpm redis:up
 pnpm dev
+pnpm dev:worker
 ```
 
 Open:
@@ -110,8 +121,11 @@ http://localhost:3000
 
 ```bash
 pnpm dev
+pnpm dev:worker
+pnpm redis:up
 pnpm build
 pnpm start
+pnpm worker
 pnpm lint
 pnpm test
 pnpm prisma studio
@@ -128,8 +142,9 @@ pnpm prisma generate
 5. Paste a provider API key.
 6. Enter a public repo, for example `owner/repo` or `https://github.com/owner/repo`.
 7. Click **Analyze Repository**.
-8. After analysis completes, the app redirects to `/reports/[reportId]`.
-9. Go to `/dashboard` to access saved reports for the signed-in user.
+8. The request creates a queued analysis job and the page streams persisted progress.
+9. After analysis completes, the app redirects to `/reports/[reportId]`.
+10. Go to `/dashboard` to access saved reports for the signed-in user.
 
 Use a small public repo for the MVP. The analysis route is synchronous and intended for bounded demos.
 
@@ -145,10 +160,16 @@ Analyze form
   -> POST /api/analyze
   -> authenticated user lookup
   -> Zod validation
+  -> user-owned Prisma report record: pending
+  -> Prisma AnalysisJob record with encrypted job-scoped provider credential
+  -> BullMQ Redis queue
+  -> SSE progress subscription
+Analysis worker
+  -> atomic job/report transition: pending -> running
   -> GitHub parser + repo metadata/tree fetch
   -> file candidate selection
   -> bounded raw content fetch
-  -> user-owned Prisma report record: pending/running
+  -> persisted step-level progress and timestamps
   -> AIProvider adapter: OpenAI or Groq
   -> AgentPipeline
        FileClassifierAgent
@@ -158,6 +179,7 @@ Analyze form
        TestingAgent
        ReportSynthesisAgent
   -> Prisma report + findings persistence
+  -> atomic job/report transition: completed/failed
   -> /reports/[reportId]
 ```
 
@@ -218,7 +240,9 @@ Success:
 
 ```json
 {
-  "reportId": "..."
+  "jobId": "...",
+  "reportId": "...",
+  "status": "pending"
 }
 ```
 
@@ -234,6 +258,14 @@ Error:
 }
 ```
 
+`GET /api/analyze/jobs/[jobId]/events`
+
+Requires an authenticated session. Streams Server-Sent Events for persisted job progress.
+
+`POST /api/analyze/jobs/[jobId]/cancel`
+
+Requires an authenticated session. Cancels a pending or running job, clears its encrypted credential, and marks the report failed with a cancellation message.
+
 `GET /api/reports/[reportId]`
 
 Requires an authenticated session. Returns a persisted report only when it belongs to the signed-in user.
@@ -248,11 +280,15 @@ Prisma models:
 - `VerificationToken`
 - `Repository`
 - `AnalysisReport`
+- `AnalysisJob`
+- `AnalysisJobProgress`
 - `Finding`
 
 Important fields:
 
 - `AnalysisReport.status`: `pending | running | completed | failed`
+- `AnalysisJob.status`: `pending | running | completed | failed | cancelled`
+- `AnalysisJobProgress`: one row per workflow step with status and timestamps
 - `AnalysisReport.scorecardJson`
 - `AnalysisReport.recommendationsJson`
 - `AnalysisReport.agentTraceJson`
@@ -303,19 +339,28 @@ If `pnpm build` fails because the database is unavailable:
 - ensure `DATABASE_URL` is set before building
 - the report page is dynamic, but Prisma still needs a generated client
 
+## Worker Semantics
+
+- Jobs are queued in Redis through BullMQ.
+- Retries use exponential backoff from `ANALYSIS_JOB_ATTEMPTS` and `ANALYSIS_JOB_BACKOFF_MS`.
+- Timeouts are enforced with `ANALYSIS_JOB_TIMEOUT_MS` and abort signals passed into GitHub/provider calls.
+- Final non-cancelled failures are copied to the `analysis.dead` dead-letter queue and kept failed in BullMQ.
+- Report transitions are guarded so completed reports are not overwritten by later failure paths.
+
 ## Deployment Notes
 
 For Vercel:
 
 1. Add `DATABASE_URL`.
-2. Add `NEXTAUTH_URL` using the deployed app URL.
-3. Add `NEXTAUTH_SECRET`.
-4. Add Google and GitHub OAuth credentials.
-5. Add optional `GITHUB_TOKEN`.
-6. Do not add user OpenAI/Groq keys as env vars for MVP.
-7. Run Prisma migration against the production database before demoing.
-
-The MVP uses synchronous analysis for small repositories. Move `runPreparedRepositoryAnalysis` behind a queue before supporting large repositories or production traffic.
+2. Add `REDIS_URL`.
+3. Add `NEXTAUTH_URL` using the deployed app URL.
+4. Add `NEXTAUTH_SECRET`.
+5. Add `ANALYSIS_JOB_SECRET`.
+6. Add Google and GitHub OAuth credentials.
+7. Add optional `GITHUB_TOKEN`.
+8. Do not add user OpenAI/Groq keys as env vars for MVP.
+9. Run Prisma migration against the production database before demoing.
+10. Run at least one long-lived `pnpm worker` process beside the Next.js app.
 
 ## Roadmap
 

@@ -16,9 +16,10 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts Account[]
-  sessions Session[]
-  reports  AnalysisReport[]
+  accounts            Account[]
+  sessions            Session[]
+  reports             AnalysisReport[]
+  analysisJobs        AnalysisJob[]
   githubInstallations GithubInstallation[]
 }
 
@@ -36,8 +37,8 @@ model GithubInstallation {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@unique([userId, installationId])
+  @@index([userId])
 }
 
 model Account {
@@ -116,8 +117,70 @@ model AnalysisReport {
   updatedAt DateTime @updatedAt
 
   findings Finding[]
+  job      AnalysisJob?
 
   @@index([userId])
+}
+
+model AnalysisJob {
+  id       String         @id @default(cuid())
+  reportId String         @unique
+  report   AnalysisReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  queueJobId    String? @unique
+  repoUrl       String
+  provider      String
+  analysisDepth String
+
+  encryptedApiKey String? @db.Text
+
+  status      String @default("pending")
+  attempt     Int    @default(0)
+  maxAttempts Int    @default(3)
+  timeoutMs   Int    @default(900000)
+
+  scheduledAt     DateTime  @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  failedAt        DateTime?
+  cancelledAt     DateTime?
+  deadLetteredAt  DateTime?
+  deadlineAt      DateTime?
+  lastHeartbeatAt DateTime?
+
+  errorCode    String?
+  errorMessage String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  progress AnalysisJobProgress[]
+
+  @@index([userId])
+  @@index([status, createdAt])
+}
+
+model AnalysisJobProgress {
+  id    String      @id @default(cuid())
+  jobId String
+  job   AnalysisJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  step    String
+  status  String
+  message String
+  detail  String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  failedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([jobId, step])
+  @@index([jobId, updatedAt])
 }
 
 model Finding {

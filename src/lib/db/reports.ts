@@ -6,6 +6,7 @@ import type {
 } from "@/lib/agents/types";
 import { prisma } from "@/lib/db/prisma";
 import { findingToCreateManyInput } from "@/lib/db/findings";
+import { AnalysisFailedError } from "@/lib/utils/errors";
 
 export async function createReport(input: {
   repositoryId: string;
@@ -22,11 +23,32 @@ export async function createReport(input: {
   });
 }
 
-export async function markReportRunning(reportId: string) {
+export async function updateReportRepository(input: {
+  reportId: string;
+  repositoryId: string;
+}) {
   return prisma.analysisReport.update({
-    where: { id: reportId },
+    where: { id: input.reportId },
+    data: { repositoryId: input.repositoryId },
+  });
+}
+
+export async function markReportRunning(reportId: string) {
+  const transition = await prisma.analysisReport.updateMany({
+    where: { id: reportId, status: "pending" },
     data: { status: "running", errorMessage: null },
   });
+
+  const report = await prisma.analysisReport.findUnique({ where: { id: reportId } });
+  if (!report) {
+    throw new AnalysisFailedError("Report record was not found.");
+  }
+
+  if (transition.count === 0 && report.status !== "running" && report.status !== "completed") {
+    throw new AnalysisFailedError(`Report ${reportId} cannot transition from ${report.status} to running.`);
+  }
+
+  return report;
 }
 
 export async function completeReport(input: {
@@ -34,38 +56,69 @@ export async function completeReport(input: {
   report: AnalysisReport;
   selectedFiles: SelectedFileMetadata[];
 }) {
-  await prisma.finding.deleteMany({
-    where: { reportId: input.reportId },
-  });
-
-  return prisma.analysisReport.update({
-    where: { id: input.reportId },
-    data: {
-      status: "completed",
-      summary: input.report.summary,
-      scorecardJson: input.report.scorecard as never,
-      mermaidDiagram: input.report.architectureDiagramMermaid,
-      recommendationsJson: input.report.recommendations as never,
-      agentTraceJson: input.report.agentTrace as never,
-      selectedFilesJson: input.selectedFiles as never,
-      errorMessage: null,
-      findings: {
-        createMany: {
-          data: input.report.findings.map((finding) => findingToCreateManyInput(finding)),
-        },
+  return prisma.$transaction(async (tx) => {
+    const transition = await tx.analysisReport.updateMany({
+      where: { id: input.reportId, status: { in: ["pending", "running"] } },
+      data: {
+        status: "completed",
+        summary: input.report.summary,
+        scorecardJson: input.report.scorecard as never,
+        mermaidDiagram: input.report.architectureDiagramMermaid,
+        recommendationsJson: input.report.recommendations as never,
+        agentTraceJson: input.report.agentTrace as never,
+        selectedFilesJson: input.selectedFiles as never,
+        errorMessage: null,
       },
-    },
+    });
+
+    const current = await tx.analysisReport.findUnique({ where: { id: input.reportId } });
+    if (!current) {
+      throw new AnalysisFailedError("Report record was not found.");
+    }
+
+    if (transition.count === 0) {
+      if (current.status === "completed") {
+        return current;
+      }
+      throw new AnalysisFailedError(`Report ${input.reportId} cannot transition from ${current.status} to completed.`);
+    }
+
+    await tx.finding.deleteMany({
+      where: { reportId: input.reportId },
+    });
+
+    if (input.report.findings.length > 0) {
+      await tx.finding.createMany({
+        data: input.report.findings.map((finding) => ({
+          ...findingToCreateManyInput(finding),
+          reportId: input.reportId,
+        })),
+      });
+    }
+
+    return tx.analysisReport.findUniqueOrThrow({ where: { id: input.reportId } });
   });
 }
 
 export async function failReport(reportId: string, errorMessage: string) {
-  return prisma.analysisReport.update({
-    where: { id: reportId },
+  const transition = await prisma.analysisReport.updateMany({
+    where: { id: reportId, status: { in: ["pending", "running"] } },
     data: {
       status: "failed",
       errorMessage,
     },
   });
+
+  const report = await prisma.analysisReport.findUnique({ where: { id: reportId } });
+  if (!report) {
+    throw new AnalysisFailedError("Report record was not found.");
+  }
+
+  if (transition.count === 0 && report.status !== "failed" && report.status !== "completed") {
+    throw new AnalysisFailedError(`Report ${reportId} cannot transition from ${report.status} to failed.`);
+  }
+
+  return report;
 }
 
 export type ReportView = {

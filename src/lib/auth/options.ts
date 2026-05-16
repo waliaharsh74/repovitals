@@ -4,6 +4,7 @@ import GitHubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/db/prisma";
 import { envValue, getAuthSecret } from "@/lib/auth/env";
+import { persistGithubAccountTokens } from "@/lib/github/oauth";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -25,9 +26,13 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user?.id) {
         token.id = user.id;
+      }
+
+      if (user?.id && account?.provider === "github") {
+        await persistGithubAccountTokens(user.id, account);
       }
 
       return token;

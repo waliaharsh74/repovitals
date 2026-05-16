@@ -13,14 +13,14 @@ export type RepoTreeResult = {
 export async function fetchRepoTree(
   owner: string,
   repo: string,
-  options?: { installationToken?: string; installationId?: string },
+  options?: { installationToken?: string; installationId?: string; signal?: AbortSignal },
 ): Promise<RepoTreeResult> {
   const auth = resolveGithubAuth({
     installationToken: options?.installationToken,
     installationId: options?.installationId,
   });
-  const metadata = await fetchRepoMetadata(owner, repo, auth);
-  const tree = await fetchGitTree(metadata.owner, metadata.name, metadata.defaultBranch, auth);
+  const metadata = await fetchRepoMetadata(owner, repo, auth, options?.signal);
+  const tree = await fetchGitTree(metadata.owner, metadata.name, metadata.defaultBranch, auth, options?.signal);
 
   return {
     owner: metadata.owner,

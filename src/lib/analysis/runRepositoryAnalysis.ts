@@ -41,6 +41,7 @@ export async function prepareRepositoryAnalysis(input: {
   analysisDepth?: AnalysisDepth;
   limits?: RepoAnalysisLimits;
   onProgress?: EmitAnalysisProgress;
+  signal?: AbortSignal;
 }): Promise<PreparedRepositoryAnalysis> {
   const limits = input.limits ?? getRepoAnalysisLimits(input.analysisDepth);
   const emit = input.onProgress;
@@ -52,7 +53,7 @@ export async function prepareRepositoryAnalysis(input: {
   });
 
   const parsed = parseGithubUrl(input.repoUrl);
-  const repoTree = await fetchRepoTree(parsed.owner, parsed.repo);
+  const repoTree = await fetchRepoTree(parsed.owner, parsed.repo, { signal: input.signal });
   const blobCount = repoTree.tree.filter((item) => item.type === "blob").length;
 
   await emit?.({
@@ -96,6 +97,7 @@ export async function prepareRepositoryAnalysis(input: {
           repo: repoTree.repo,
           branch: repoTree.defaultBranch,
           path: file.path,
+          signal: input.signal,
         });
 
         if (!content.trim()) {
@@ -166,10 +168,12 @@ export async function runPreparedRepositoryAnalysis(input: {
   apiKey: string;
   prepared: PreparedRepositoryAnalysis;
   onProgress?: EmitAnalysisProgress;
+  signal?: AbortSignal;
 }): Promise<RepositoryAnalysisResult> {
   const provider = createAIProvider({
     provider: input.provider,
     apiKey: input.apiKey,
+    signal: input.signal,
   });
 
   const report = await runAgentPipeline({
@@ -193,16 +197,19 @@ export async function runRepositoryAnalysis(input: {
   repoUrl: string;
   analysisDepth?: AnalysisDepth;
   onProgress?: EmitAnalysisProgress;
+  signal?: AbortSignal;
 }): Promise<RepositoryAnalysisResult> {
   const prepared = await prepareRepositoryAnalysis({
     repoUrl: input.repoUrl,
     analysisDepth: input.analysisDepth,
     onProgress: input.onProgress,
+    signal: input.signal,
   });
   return runPreparedRepositoryAnalysis({
     provider: input.provider,
     apiKey: input.apiKey,
     prepared,
     onProgress: input.onProgress,
+    signal: input.signal,
   });
 }

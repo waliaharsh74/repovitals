@@ -15,6 +15,10 @@ export type AnalysisWorkflowStepState = {
   status: AnalysisProgressStatus;
   message?: string;
   detail?: string;
+  startedAt?: string;
+  completedAt?: string;
+  failedAt?: string;
+  updatedAt?: string;
 };
 
 export function createInitialWorkflowSteps(): AnalysisWorkflowStepState[] {
@@ -33,6 +37,16 @@ export function AnalysisWorkflow({
 }) {
   if (!visible) {
     return null;
+  }
+
+  function formatStepTime(step: AnalysisWorkflowStepState) {
+    const timestamp = step.completedAt ?? step.failedAt ?? step.startedAt;
+    if (!timestamp) {
+      return null;
+    }
+
+    const label = step.completedAt ? "Completed" : step.failedAt ? "Failed" : "Started";
+    return `${label} ${new Date(timestamp).toLocaleTimeString()}`;
   }
 
   return (
@@ -79,6 +93,9 @@ export function AnalysisWorkflow({
                 </div>
                 <p className="text-xs text-muted-foreground">{step.message ?? step.description}</p>
                 {step.detail ? <p className="text-xs text-muted-foreground">{step.detail}</p> : null}
+                {formatStepTime(step) ? (
+                  <p className="text-xs text-muted-foreground">{formatStepTime(step)}</p>
+                ) : null}
               </div>
             </li>
           );

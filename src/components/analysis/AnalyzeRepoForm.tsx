@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Github, SearchCode } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
-import type { AnalysisProgressEvent } from "@/lib/analysis/progress";
+import type { AnalysisProgressEvent, AnalysisProgressRecord } from "@/lib/analysis/progress";
 import { analyzeSchema, type AnalyzeInput } from "@/lib/validators/analyzeSchema";
 import { ApiKeyInput } from "@/components/analysis/ApiKeyInput";
 import { AnalysisStatus } from "@/components/analysis/AnalysisStatus";
@@ -33,11 +33,17 @@ type ApiError = {
     message: string;
   };
   reportId?: string;
+  jobId?: string;
+  status?: string;
 };
+
+type AnalysisState = "idle" | "queued" | "running" | "error" | "success";
 
 export function AnalyzeRepoForm() {
   const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [connectGithubPrompt, setConnectGithubPrompt] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [repoOptions, setRepoOptions] = useState<GithubRepoOption[]>([]);
@@ -46,6 +52,7 @@ export function AnalyzeRepoForm() {
     createInitialWorkflowSteps,
   );
   const [showWorkflow, setShowWorkflow] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const form = useForm<AnalyzeInput>({
     resolver: zodResolver(analyzeSchema),
     defaultValues: {
@@ -62,6 +69,8 @@ export function AnalyzeRepoForm() {
   }, [form]);
 
   const isSubmitting = form.formState.isSubmitting;
+  const isAnalysisActive = analysisState === "queued" || analysisState === "running";
+  const isFormDisabled = isSubmitting || isAnalysisActive;
 
   useEffect(() => {
     async function loadRepos() {
@@ -81,7 +90,54 @@ export function AnalyzeRepoForm() {
     loadRepos();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      eventSourceRef.current?.close();
+    };
+  }, []);
+
+  function applyProgressSnapshot(steps: AnalysisProgressRecord[]) {
+    setWorkflowSteps((current) =>
+      current.map((step) => {
+        const persisted = steps.find((item) => item.step === step.id);
+        if (!persisted) {
+          return step;
+        }
+
+        return {
+          ...step,
+          status: persisted.status,
+          message: persisted.message,
+          detail: persisted.detail ?? undefined,
+          startedAt: persisted.startedAt ?? undefined,
+          completedAt: persisted.completedAt ?? undefined,
+          failedAt: persisted.failedAt ?? undefined,
+          updatedAt: persisted.updatedAt,
+        };
+      }),
+    );
+  }
+
   function applyProgressEvent(event: AnalysisProgressEvent) {
+    if (event.type === "snapshot") {
+      applyProgressSnapshot(event.steps);
+      setActiveJobId(event.jobId);
+      setAnalysisState(
+        event.status === "pending"
+          ? "queued"
+          : event.status === "running"
+            ? "running"
+            : event.status === "completed"
+              ? "success"
+              : "error",
+      );
+      setStatusMessage(
+        event.message ??
+          (event.status === "pending" ? "Analysis queued. Waiting for the worker..." : "Analysis is running..."),
+      );
+      return;
+    }
+
     if (event.type === "progress") {
       setWorkflowSteps((current) =>
         current.map((step) =>
@@ -95,74 +151,81 @@ export function AnalyzeRepoForm() {
             : step,
         ),
       );
+      setAnalysisState("running");
       setStatusMessage(event.message);
       return;
     }
 
     if (event.type === "complete") {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      setActiveJobId(null);
+      setAnalysisState("success");
       setStatusMessage(event.message);
       router.push(`/reports/${event.reportId}`);
       return;
     }
 
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+    setActiveJobId(null);
+    setAnalysisState("error");
     setStatusMessage(null);
     setSubmitError(event.message);
   }
 
-  async function handleJsonFallback(response: Response) {
-    const payload = (await response.json()) as ApiError & { reportId?: string };
-
+  async function handleApiResponse(response: Response) {
+    const payload = (await response.json()) as ApiError;
     if (!response.ok) {
       setStatusMessage(null);
+      setAnalysisState("error");
       setConnectGithubPrompt(payload.error?.code === "GITHUB_APP_INSTALLATION_REQUIRED");
       setSubmitError(payload.error?.message ?? "Analysis failed. Check the inputs and try again.");
       return;
     }
 
-    if (payload.reportId) {
-      setStatusMessage("Report created. Opening results...");
-      router.push(`/reports/${payload.reportId}`);
-    }
-  }
-
-  async function readProgressStream(response: Response) {
-    if (!response.body) {
-      await handleJsonFallback(response);
+    if (!payload.jobId) {
+      setAnalysisState("error");
+      setSubmitError("Analysis was accepted but no job ID was returned.");
       return;
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    setActiveJobId(payload.jobId);
+    setAnalysisState("queued");
+    setStatusMessage("Analysis queued. Waiting for the worker...");
+    subscribeToJob(payload.jobId);
+  }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+  function subscribeToJob(jobId: string) {
+    eventSourceRef.current?.close();
+    const source = new EventSource(`/api/analyze/jobs/${encodeURIComponent(jobId)}/events`);
+    eventSourceRef.current = source;
 
-      for (const line of lines) {
-        if (!line.trim()) {
-          continue;
-        }
-
-        applyProgressEvent(JSON.parse(line) as AnalysisProgressEvent);
-      }
-
-      if (done) {
-        break;
-      }
-    }
-
-    if (buffer.trim()) {
-      applyProgressEvent(JSON.parse(buffer) as AnalysisProgressEvent);
-    }
+    source.addEventListener("snapshot", (message) => {
+      applyProgressEvent(JSON.parse(message.data) as AnalysisProgressEvent);
+    });
+    source.addEventListener("complete", (message) => {
+      applyProgressEvent(JSON.parse(message.data) as AnalysisProgressEvent);
+    });
+    source.addEventListener("job-error", (message) => {
+      applyProgressEvent(JSON.parse(message.data) as AnalysisProgressEvent);
+    });
+    source.onerror = () => {
+      source.close();
+      eventSourceRef.current = null;
+      setActiveJobId(null);
+      setAnalysisState("error");
+      setStatusMessage(null);
+      setSubmitError("Lost the analysis progress connection. Refresh the report from the dashboard or retry.");
+    };
   }
 
   async function onSubmit(values: AnalyzeInput) {
     setSubmitError(null);
     setConnectGithubPrompt(false);
     setStatusMessage("Validating request...");
+    setAnalysisState("queued");
+    setActiveJobId(null);
     setWorkflowSteps(createInitialWorkflowSteps());
     setShowWorkflow(true);
 
@@ -170,25 +233,29 @@ export function AnalyzeRepoForm() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: {
-          Accept: "application/x-ndjson",
+          Accept: "application/json",
           "Content-Type": "application/json",
-          "X-RepoVitals-Stream": "1",
         },
         body: JSON.stringify(values),
       });
 
-      const contentType = response.headers.get("content-type") ?? "";
-
-      if (!response.ok || !contentType.includes("application/x-ndjson")) {
-        await handleJsonFallback(response);
-        return;
-      }
-
-      await readProgressStream(response);
+      await handleApiResponse(response);
     } catch (error) {
       setStatusMessage(null);
+      setAnalysisState("error");
       setSubmitError(error instanceof Error ? error.message : "Analysis failed. Check the inputs and try again.");
     }
+  }
+
+  async function cancelActiveJob() {
+    if (!activeJobId) {
+      return;
+    }
+
+    setStatusMessage("Cancelling analysis...");
+    await fetch(`/api/analyze/jobs/${encodeURIComponent(activeJobId)}/cancel`, {
+      method: "POST",
+    });
   }
 
   return (
@@ -205,7 +272,7 @@ export function AnalyzeRepoForm() {
             control={form.control}
             name="provider"
             render={({ field }) => (
-              <ProviderSelector value={field.value} onChange={field.onChange} disabled={isSubmitting} />
+              <ProviderSelector value={field.value} onChange={field.onChange} disabled={isFormDisabled} />
             )}
           />
 
@@ -213,7 +280,7 @@ export function AnalyzeRepoForm() {
             control={form.control}
             name="apiKey"
             render={({ field }) => (
-              <ApiKeyInput value={field.value} onChange={field.onChange} disabled={isSubmitting} />
+              <ApiKeyInput value={field.value} onChange={field.onChange} disabled={isFormDisabled} />
             )}
           />
           {form.formState.errors.apiKey ? (
@@ -229,7 +296,7 @@ export function AnalyzeRepoForm() {
                   type="checkbox"
                   className="mt-1 size-4 accent-teal-700"
                   checked={field.value === "expanded"}
-                  disabled={isSubmitting}
+                  disabled={isFormDisabled}
                   onChange={(event) => field.onChange(event.target.checked ? "expanded" : "standard")}
                 />
                 <span className="space-y-1">
@@ -248,7 +315,7 @@ export function AnalyzeRepoForm() {
             <select
               id="repoPicker"
               className="w-full rounded-md border bg-background p-2 text-sm"
-              disabled={isSubmitting || reposLoading || repoOptions.length === 0}
+              disabled={isFormDisabled || reposLoading || repoOptions.length === 0}
               onChange={(event) => {
                 if (event.target.value) {
                   form.setValue("repoUrl", event.target.value, { shouldValidate: true });
@@ -272,7 +339,7 @@ export function AnalyzeRepoForm() {
                 id="repoUrl"
                 placeholder="owner/repo or https://github.com/owner/repo"
                 className="pl-9"
-                disabled={isSubmitting}
+                disabled={isFormDisabled}
                 {...form.register("repoUrl")}
               />
             </div>
@@ -282,8 +349,9 @@ export function AnalyzeRepoForm() {
           </div>
 
           <AnalysisStatus
-            status={submitError ? "error" : isSubmitting ? "running" : statusMessage ? "success" : "idle"}
+            status={submitError ? "error" : isAnalysisActive || isSubmitting ? "running" : statusMessage ? "success" : "idle"}
             message={submitError ?? statusMessage ?? undefined}
+            onCancel={isAnalysisActive ? cancelActiveJob : undefined}
           />
 
           {connectGithubPrompt ? (
@@ -297,9 +365,9 @@ export function AnalyzeRepoForm() {
 
           <AnalysisWorkflow steps={workflowSteps} visible={showWorkflow} />
 
-          <Button className="w-full" type="submit" disabled={isSubmitting}>
+          <Button className="w-full" type="submit" disabled={isFormDisabled}>
             <SearchCode className="size-4" />
-            {isSubmitting ? "Analyzing repository" : "Analyze Repository"}
+            {isFormDisabled ? "Analysis in progress" : "Analyze Repository"}
           </Button>
         </form>
       </CardContent>

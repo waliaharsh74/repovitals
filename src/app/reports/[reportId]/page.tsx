@@ -57,7 +57,7 @@ export default async function ReportPage({
             <CardTitle>Report is still running</CardTitle>
           </CardHeader>
           <CardContent className="text-muted-foreground">
-            Refresh this page in a moment. The MVP runs analysis synchronously, but status is persisted.
+            This analysis is still running in the background. Progress is available from the analysis page.
           </CardContent>
         </Card>
       </main>
