@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Gauge,
   Github,
+  Lock,
   Network,
   Search,
   SearchCode,
@@ -35,7 +36,7 @@ import {
   type AnalysisWorkflowStepState,
 } from "@/components/analysis/AnalysisWorkflow";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,7 @@ export function AnalyzeRepoForm() {
   const selectedAgentSet = new Set(selectedAgentIds);
   const selectedAgentCount = selectedAgentSet.size;
   const isFullAnalysisSelected = areAllAnalysisAgentsSelected(selectedAgentIds);
+  const selectedRepoUrl = form.watch("repoUrl");
 
   useEffect(() => {
     async function loadRepos() {
@@ -289,6 +291,13 @@ export function AnalyzeRepoForm() {
     );
   }
 
+  function selectRepository(repo: GithubRepoOption) {
+    form.setValue("repoUrl", repo.url, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
   async function onSubmit(values: AnalyzeInput) {
     setSubmitError(null);
     setConnectGithubPrompt(false);
@@ -328,261 +337,313 @@ export function AnalyzeRepoForm() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Analyze a repository</CardTitle>
-        <CardDescription>
-          Paste any repo URL. If it is private, RepoVitals will guide you to connect GitHub App access.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
-          <Controller
-            control={form.control}
-            name="apiKey"
-            render={({ field }) => (
-              <ApiKeyInput value={field.value} onChange={field.onChange} disabled={isFormDisabled} />
-            )}
-          />
-          {form.formState.errors.apiKey ? (
-            <p className="text-sm text-destructive">{form.formState.errors.apiKey.message}</p>
-          ) : null}
-
-          <Controller
-            control={form.control}
-            name="analysisDepth"
-            render={({ field }) => (
-              <label className="flex gap-3 rounded-md border bg-muted/30 p-3 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4 accent-teal-700"
-                  checked={field.value === "expanded"}
-                  disabled={isFormDisabled}
-                  onChange={(event) => field.onChange(event.target.checked ? "expanded" : "standard")}
-                />
-                <span className="space-y-1">
-                  <span className="block font-medium">Expanded coverage</span>
-                  <span className="block text-muted-foreground">
-                    Use more of this OpenAI key with higher file, character, and finding caps. Hard
-                    safety caps still apply to prevent runaway spend.
-                  </span>
-                </span>
-              </label>
-            )}
-          />
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <Label>Review agents</Label>
-              <span className="text-xs font-medium text-muted-foreground">
-                {selectedAgentCount} of {DEFAULT_ANALYSIS_AGENT_IDS.length} selected
-              </span>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                className={cn(
-                  "flex min-h-24 items-start gap-3 rounded-md border bg-background p-3 text-left transition-colors",
-                  analysisMode === "full" && isFullAnalysisSelected
-                    ? "border-primary bg-primary/5"
-                    : "hover:bg-muted/40",
-                )}
-                disabled={isFormDisabled}
-                onClick={chooseFullAnalysis}
-              >
-                <CheckCircle2
-                  className={cn(
-                    "mt-0.5 size-4 shrink-0",
-                    analysisMode === "full" && isFullAnalysisSelected
-                      ? "text-primary"
-                      : "text-muted-foreground",
+    <Card className="rv-reveal-up rv-reveal-delay-1 overflow-hidden shadow-sm">
+      <CardContent className="p-0">
+        <form className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_380px]" onSubmit={form.handleSubmit(onSubmit)}>
+          <section className="space-y-5 p-4 sm:p-5 lg:p-6">
+            <div className="space-y-2">
+              <div className="rounded-md border bg-background p-4">
+                <Controller
+                  control={form.control}
+                  name="apiKey"
+                  render={({ field }) => (
+                    <ApiKeyInput value={field.value} onChange={field.onChange} disabled={isFormDisabled} />
                   )}
                 />
-                <span className="space-y-1">
-                  <span className="block text-sm font-medium">Full analysis</span>
-                  <span className="block text-xs leading-5 text-muted-foreground">
-                    Run every review agent for the broadest production-readiness report.
-                  </span>
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className={cn(
-                  "flex min-h-24 items-start gap-3 rounded-md border bg-background p-3 text-left transition-colors",
-                  analysisMode === "custom" ? "border-primary bg-primary/5" : "hover:bg-muted/40",
-                )}
-                disabled={isFormDisabled}
-                onClick={chooseCustomAnalysis}
-              >
-                <SlidersHorizontal
-                  className={cn(
-                    "mt-0.5 size-4 shrink-0",
-                    analysisMode === "custom" ? "text-primary" : "text-muted-foreground",
-                  )}
-                />
-                <span className="space-y-1">
-                  <span className="block text-sm font-medium">Custom selection</span>
-                  <span className="block text-xs leading-5 text-muted-foreground">
-                    Pick the agents that match the repository questions you want answered.
-                  </span>
-                </span>
-              </button>
-            </div>
-
-            {analysisMode === "custom" ? (
-              <div className="grid gap-2">
-                {SELECTABLE_ANALYSIS_AGENTS.map((agent) => {
-                  const Icon = agentIcons[agent.id];
-                  const checked = selectedAgentSet.has(agent.id);
-                  const canToggle = !isFormDisabled && (!checked || selectedAgentCount > 1);
-
-                  return (
-                    <label
-                      key={agent.id}
-                      className={cn(
-                        "flex cursor-pointer items-start gap-3 rounded-md border bg-background p-3 text-sm transition-colors",
-                        checked ? "border-primary bg-primary/5" : "hover:bg-muted/40",
-                        !canToggle && "cursor-not-allowed opacity-70",
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={checked}
-                        disabled={!canToggle}
-                        onChange={() => toggleAgent(agent.id)}
-                      />
-                      <Icon
-                        className={cn(
-                          "mt-0.5 size-4 shrink-0",
-                          checked ? "text-primary" : "text-muted-foreground",
-                        )}
-                      />
-                      <span className="min-w-0 flex-1 space-y-1">
-                        <span className="block font-medium">{agent.label}</span>
-                        <span className="block text-xs leading-5 text-muted-foreground">
-                          {agent.description}
-                        </span>
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "mt-0.5 grid size-4 shrink-0 place-items-center rounded-sm border",
-                          checked ? "border-primary bg-primary text-primary-foreground" : "bg-background",
-                        )}
-                      >
-                        {checked ? <CheckCircle2 className="size-3" /> : null}
-                      </span>
-                    </label>
-                  );
-                })}
+                {form.formState.errors.apiKey ? (
+                  <p className="mt-2 text-sm text-destructive">{form.formState.errors.apiKey.message}</p>
+                ) : null}
               </div>
-            ) : null}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="repoUrl">Repository</Label>
+                  <span className="text-xs font-medium text-muted-foreground">Required</span>
+                </div>
+                <div className="relative">
+                  <Github className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="repoUrl"
+                    placeholder="owner/repo or https://github.com/owner/repo"
+                    className="pl-9"
+                    disabled={isFormDisabled}
+                    {...form.register("repoUrl")}
+                  />
+                </div>
+                {form.formState.errors.repoUrl ? (
+                  <p className="text-sm text-destructive">{form.formState.errors.repoUrl.message}</p>
+                ) : null}
+              </div>
 
-            {form.formState.errors.agentIds ? (
-              <p className="text-sm text-destructive">{form.formState.errors.agentIds.message}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="repoSearch">Your GitHub repositories</Label>
-              {repoOptions.length ? (
-                <span className="text-xs font-medium text-muted-foreground">
-                  {filteredRepoOptions.length} of {repoOptions.length}
-                </span>
-              ) : null}
+            
             </div>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="repoSearch"
-                type="search"
-                placeholder="Search repositories by name"
-                className="pl-9 pr-9"
-                value={repoSearchQuery}
-                disabled={isFormDisabled || reposLoading || repoOptions.length === 0}
-                onChange={(event) => setRepoSearchQuery(event.target.value)}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label htmlFor="repoSearch">GitHub repositories</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Select one to fill the repository field.
+                  </p>
+                </div>
+                {repoOptions.length ? (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {filteredRepoOptions.length} of {repoOptions.length}
+                  </span>
+                ) : null}
+              </div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="repoSearch"
+                  type="search"
+                  placeholder="Search repositories"
+                  className="pl-9 pr-9"
+                  value={repoSearchQuery}
+                  disabled={isFormDisabled || reposLoading || repoOptions.length === 0}
+                  onChange={(event) => setRepoSearchQuery(event.target.value)}
+                />
+                {repoSearchQuery ? (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                    disabled={isFormDisabled}
+                    aria-label="Clear repository search"
+                    onClick={() => setRepoSearchQuery("")}
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
+              </div>
+              <div className="overflow-hidden rounded-md border bg-background shadow-sm">
+                {reposLoading ? (
+                  <div className="space-y-2 p-3">
+                    {[0, 1, 2].map((item) => (
+                      <div key={item} className="h-12 rounded-md bg-muted rv-soft-pulse" />
+                    ))}
+                  </div>
+                ) : repoOptions.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No GitHub repositories are available for this account.
+                  </div>
+                ) : filteredRepoOptions.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No repositories match this search.
+                  </div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto p-1" aria-label="GitHub repositories">
+                    {filteredRepoOptions.map((repo) => {
+                      const selected = selectedRepoUrl === repo.url;
+
+                      return (
+                        <button
+                          key={repo.id}
+                          type="button"
+                          className={cn(
+                            "group flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-all duration-200",
+                            selected
+                              ? "bg-primary/10 text-foreground"
+                              : "hover:bg-muted/60 hover:shadow-sm",
+                          )}
+                          disabled={isFormDisabled}
+                          aria-pressed={selected}
+                          onClick={() => selectRepository(repo)}
+                        >
+                          <Github
+                            className={cn(
+                              "mt-0.5 size-4 shrink-0 transition-colors",
+                              selected
+                                ? "text-primary"
+                                : "text-muted-foreground group-hover:text-foreground",
+                            )}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{repo.fullName}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{repo.url}</span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            {repo.private ? (
+                              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium">
+                                <Lock className="size-3" />
+                                Private
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium">
+                                Public
+                              </span>
+                            )}
+                            {selected ? <CheckCircle2 className="size-4 text-primary" /> : null}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <aside className="border-t bg-slate-50/70 p-4 sm:p-5 lg:border-l lg:border-t-0 lg:p-6">
+            <div className="space-y-5 lg:sticky lg:top-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Review scope</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Tune breadth before the run.</p>
+                  </div>
+                  <span className="rounded-md border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {selectedAgentCount}/{DEFAULT_ANALYSIS_AGENT_IDS.length}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex min-h-[72px] flex-col justify-between rounded-md border bg-background p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm",
+                      analysisMode === "full" && isFullAnalysisSelected && "border-primary bg-primary/5",
+                    )}
+                    disabled={isFormDisabled}
+                    aria-pressed={analysisMode === "full" && isFullAnalysisSelected}
+                    onClick={chooseFullAnalysis}
+                  >
+                    <CheckCircle2
+                      className={cn(
+                        "size-4",
+                        analysisMode === "full" && isFullAnalysisSelected
+                          ? "text-primary"
+                          : "text-muted-foreground",
+                      )}
+                    />
+                    <span className="text-sm font-medium">Full</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex min-h-[72px] flex-col justify-between rounded-md border bg-background p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm",
+                      analysisMode === "custom" && "border-primary bg-primary/5",
+                    )}
+                    disabled={isFormDisabled}
+                    aria-pressed={analysisMode === "custom"}
+                    onClick={chooseCustomAnalysis}
+                  >
+                    <SlidersHorizontal
+                      className={cn(
+                        "size-4",
+                        analysisMode === "custom" ? "text-primary" : "text-muted-foreground",
+                      )}
+                    />
+                    <span className="text-sm font-medium">Custom</span>
+                  </button>
+                </div>
+
+                {analysisMode === "custom" ? (
+                  <div className="rv-reveal-up grid grid-cols-2 gap-2">
+                    {SELECTABLE_ANALYSIS_AGENTS.map((agent) => {
+                      const Icon = agentIcons[agent.id];
+                      const checked = selectedAgentSet.has(agent.id);
+                      const canToggle = !isFormDisabled && (!checked || selectedAgentCount > 1);
+
+                      return (
+                        <label
+                          key={agent.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2.5 text-sm transition-all duration-200 hover:border-primary/40 hover:bg-muted/40",
+                            checked && "border-primary bg-primary/5",
+                            !canToggle && "cursor-not-allowed opacity-70",
+                          )}
+                          title={agent.description}
+                          aria-label={`${agent.label}. ${agent.description}`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={checked}
+                            disabled={!canToggle}
+                            onChange={() => toggleAgent(agent.id)}
+                          />
+                          <Icon
+                            className={cn(
+                              "size-4 shrink-0",
+                              checked ? "text-primary" : "text-muted-foreground",
+                            )}
+                          />
+                          <span className="min-w-0 flex-1 truncate font-medium">{agent.label}</span>
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              "grid size-4 shrink-0 place-items-center rounded-sm border",
+                              checked
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "bg-background",
+                            )}
+                          >
+                            {checked ? <CheckCircle2 className="size-3" /> : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {form.formState.errors.agentIds ? (
+                  <p className="text-sm text-destructive">{form.formState.errors.agentIds.message}</p>
+                ) : null}
+              </div>
+
+              <Controller
+                control={form.control}
+                name="analysisDepth"
+                render={({ field }) => (
+                  <label className="flex gap-3 rounded-md border bg-background p-3 text-sm transition-colors hover:bg-muted/30">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4 accent-teal-700"
+                      checked={field.value === "expanded"}
+                      disabled={isFormDisabled}
+                      onChange={(event) => field.onChange(event.target.checked ? "expanded" : "standard")}
+                    />
+                    <span className="space-y-1">
+                      <span className="block font-medium">Expanded coverage</span>
+                      <span className="block text-xs leading-5 text-muted-foreground">
+                        Higher file, character, and finding caps for deeper reviews.
+                      </span>
+                    </span>
+                  </label>
+                )}
               />
-              {repoSearchQuery ? (
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                  disabled={isFormDisabled}
-                  aria-label="Clear repository search"
-                  onClick={() => setRepoSearchQuery("")}
-                >
-                  <X className="size-4" />
-                </button>
-              ) : null}
-            </div>
-            <select
-              id="repoPicker"
-              className="w-full rounded-md border bg-background p-2 text-sm"
-              disabled={isFormDisabled || reposLoading || filteredRepoOptions.length === 0}
-              onChange={(event) => {
-                if (event.target.value) {
-                  form.setValue("repoUrl", event.target.value, { shouldValidate: true });
-                }
-              }}
-            >
-              <option value="">
-                {reposLoading
-                  ? "Loading repositories..."
-                  : repoOptions.length === 0
-                    ? "No repositories available"
-                    : filteredRepoOptions.length === 0
-                      ? "No repositories match this search"
-                      : "Select a repository (optional)"}
-              </option>
-              {filteredRepoOptions.map((repo) => (
-                <option key={repo.id} value={repo.url}>
-                  {repo.fullName}{repo.private ? " (private)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="repoUrl">GitHub repository</Label>
-            <div className="relative">
-              <Github className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="repoUrl"
-                placeholder="owner/repo or https://github.com/owner/repo"
-                className="pl-9"
-                disabled={isFormDisabled}
-                {...form.register("repoUrl")}
-              />
-            </div>
-            {form.formState.errors.repoUrl ? (
-              <p className="text-sm text-destructive">{form.formState.errors.repoUrl.message}</p>
-            ) : null}
-          </div>
-
-          <AnalysisStatus
-            status={submitError ? "error" : isAnalysisActive || isSubmitting ? "running" : statusMessage ? "success" : "idle"}
-            message={submitError ?? statusMessage ?? undefined}
-            onCancel={isAnalysisActive ? cancelActiveJob : undefined}
-          />
-
-          {connectGithubPrompt ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-              <p className="mb-2">This repository is private. Connect GitHub App access and then retry.</p>
-              <Button asChild type="button" variant="outline">
-                <a href={connectGithubUrl}>Connect GitHub App</a>
+              <Button className="h-11 w-full shadow-sm transition-transform active:translate-y-px" type="submit" disabled={isFormDisabled}>
+                <SearchCode className="size-4" />
+                {isFormDisabled ? "Analysis in progress" : "Analyze Repository"}
               </Button>
+
+              <AnalysisStatus
+                status={
+                  submitError
+                    ? "error"
+                    : isAnalysisActive || isSubmitting
+                      ? "running"
+                      : statusMessage
+                        ? "success"
+                        : "idle"
+                }
+                message={submitError ?? statusMessage ?? undefined}
+                onCancel={isAnalysisActive ? cancelActiveJob : undefined}
+              />
+
+              {connectGithubPrompt ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="mb-2">This repository is private. Connect GitHub App access and then retry.</p>
+                  <Button asChild type="button" variant="outline">
+                    <a href={connectGithubUrl}>Connect GitHub App</a>
+                  </Button>
+                </div>
+              ) : null}
+
+              <AnalysisWorkflow steps={workflowSteps} visible={showWorkflow} />
             </div>
-          ) : null}
-
-          <AnalysisWorkflow steps={workflowSteps} visible={showWorkflow} />
-
-          <Button className="w-full" type="submit" disabled={isFormDisabled}>
-            <SearchCode className="size-4" />
-            {isFormDisabled ? "Analysis in progress" : "Analyze Repository"}
-          </Button>
+          </aside>
         </form>
       </CardContent>
     </Card>

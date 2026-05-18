@@ -30,7 +30,7 @@ export function ApiKeyInput({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Your OpenAI key is used only for this analysis and is not stored.
+        Required for the agents that run this review.
       </p>
     </div>
   );

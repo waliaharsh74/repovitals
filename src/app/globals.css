@@ -40,3 +40,43 @@ code {
   height: auto;
   max-width: 100%;
 }
+
+@keyframes rv-reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rv-soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.rv-reveal-up {
+  animation: rv-reveal-up 420ms ease-out both;
+}
+
+.rv-reveal-delay-1 {
+  animation-delay: 70ms;
+}
+
+.rv-soft-pulse {
+  animation: rv-soft-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-reveal-up,
+  .rv-soft-pulse {
+    animation: none;
+  }
+}

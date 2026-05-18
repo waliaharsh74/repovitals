@@ -66,6 +66,9 @@ export function AnalysisWorkflow({
     return null;
   }
 
+  const completedCount = steps.filter((step) => step.status === "completed").length;
+  const progressPercent = steps.length ? Math.round((completedCount / steps.length) * 100) : 0;
+
   function formatStepTime(step: AnalysisWorkflowStepState) {
     const timestamp = step.completedAt ?? step.failedAt ?? step.startedAt;
     if (!timestamp) {
@@ -77,11 +80,22 @@ export function AnalysisWorkflow({
   }
 
   return (
-    <div className="rounded-md border bg-background">
-      <div className="border-b px-4 py-3">
-        <p className="text-sm font-medium">Analysis workflow</p>
+    <div className="rv-reveal-up overflow-hidden rounded-md border bg-background">
+      <div className="space-y-2 border-b px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium">Workflow</p>
+          <span className="text-xs font-medium text-muted-foreground">
+            {completedCount}/{steps.length}
+          </span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
       </div>
-      <ol className="divide-y">
+      <ol className="max-h-80 divide-y overflow-y-auto">
         {steps.map((step) => {
           const Icon =
             step.status === "completed"
@@ -93,7 +107,13 @@ export function AnalysisWorkflow({
                   : Circle;
 
           return (
-            <li key={step.id} className="flex gap-3 px-4 py-3">
+            <li
+              key={step.id}
+              className={cn(
+                "flex gap-3 px-4 py-3 transition-colors",
+                step.status === "running" && "bg-primary/5",
+              )}
+            >
               <Icon
                 className={cn(
                   "mt-0.5 size-4 shrink-0",
@@ -118,8 +138,12 @@ export function AnalysisWorkflow({
                     {step.status}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">{step.message ?? step.description}</p>
-                {step.detail ? <p className="text-xs text-muted-foreground">{step.detail}</p> : null}
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {step.message ?? step.description}
+                </p>
+                {step.detail ? (
+                  <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{step.detail}</p>
+                ) : null}
                 {formatStepTime(step) ? (
                   <p className="text-xs text-muted-foreground">{formatStepTime(step)}</p>
                 ) : null}
