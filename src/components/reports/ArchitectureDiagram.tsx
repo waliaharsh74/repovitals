@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useState } from "react";
 import mermaid from "mermaid";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function ArchitectureDiagram({ chart }: { chart: string }) {
   const id = useId().replace(/:/g, "");
@@ -46,21 +45,14 @@ export function ArchitectureDiagram({ chart }: { chart: string }) {
     };
   }, [chart, id]);
 
+  if (error) {
+    return <pre className="overflow-x-auto rounded-md bg-muted p-4 text-sm">{chart}</pre>;
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Architecture diagram</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {error ? (
-          <pre className="overflow-x-auto rounded-md bg-muted p-4 text-sm">{chart}</pre>
-        ) : (
-          <div
-            className="mermaid overflow-x-auto rounded-md bg-white p-4"
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-        )}
-      </CardContent>
-    </Card>
+    <div
+      className="mermaid overflow-x-auto rounded-md bg-white p-4"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
   );
 }

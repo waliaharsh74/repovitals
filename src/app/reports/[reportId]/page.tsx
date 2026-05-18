@@ -5,6 +5,7 @@ import { ArchitectureDiagram } from "@/components/reports/ArchitectureDiagram";
 import { FindingsTable } from "@/components/reports/FindingsTable";
 import { Recommendations } from "@/components/reports/Recommendations";
 import { ReportAnalysisWorkflow } from "@/components/reports/ReportAnalysisWorkflow";
+import { ReportAccordionSection } from "@/components/reports/ReportAccordionSection";
 import { ReportHeader } from "@/components/reports/ReportHeader";
 import { ScoreCards } from "@/components/reports/ScoreCards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +46,15 @@ export default async function ReportPage({
           </CardHeader>
           <CardContent className="text-red-800">{report.errorMessage}</CardContent>
         </Card>
-        {report.agentTrace.length ? <AgentTrace trace={report.agentTrace} /> : null}
+        {report.agentTrace.length ? (
+          <ReportAccordionSection
+            title="Agent trace"
+            badge={`${report.agentTrace.length} steps`}
+            defaultOpen={false}
+          >
+            <AgentTrace trace={report.agentTrace} />
+          </ReportAccordionSection>
+        ) : null}
       </main>
     );
   }
@@ -69,34 +78,56 @@ export default async function ReportPage({
       <ReportHeader report={report} />
       <ScoreCards scorecard={report.scorecard} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Summary</CardTitle>
-        </CardHeader>
-        <CardContent className="leading-7 text-muted-foreground">{report.summary}</CardContent>
-      </Card>
+      <ReportAccordionSection title="Summary">
+        <p className="leading-7 text-muted-foreground">{report.summary}</p>
+      </ReportAccordionSection>
 
-      <ArchitectureDiagram chart={report.mermaidDiagram} />
-      <FindingsTable findings={report.findings} />
-      <Recommendations recommendations={report.recommendations} />
-      <AgentTrace trace={report.agentTrace} />
+      <ReportAccordionSection
+        title="Architecture diagram"
+        description="Rendered from the analyzed repository structure."
+      >
+        <ArchitectureDiagram chart={report.mermaidDiagram} />
+      </ReportAccordionSection>
+
+      <ReportAccordionSection
+        title="Top findings"
+        description="Severity-ranked issues grouped by review category."
+        badge={`${report.findings.length} ${report.findings.length === 1 ? "finding" : "findings"}`}
+      >
+        <FindingsTable findings={report.findings} />
+      </ReportAccordionSection>
+
+      <ReportAccordionSection
+        title="Recommendations"
+        badge={`${report.recommendations.length} items`}
+        defaultOpen={false}
+      >
+        <Recommendations recommendations={report.recommendations} />
+      </ReportAccordionSection>
+
+      <ReportAccordionSection
+        title="Agent trace"
+        badge={`${report.agentTrace.length} steps`}
+        defaultOpen={false}
+      >
+        <AgentTrace trace={report.agentTrace} />
+      </ReportAccordionSection>
 
       {report.selectedFiles.length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Selected files</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2 text-sm md:grid-cols-2">
-              {report.selectedFiles.map((file) => (
-                <div key={file.path} className="rounded-md border px-3 py-2">
-                  <p className="font-medium">{file.path}</p>
-                  <p className="text-muted-foreground">{file.reason}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <ReportAccordionSection
+          title="Selected files"
+          badge={`${report.selectedFiles.length} files`}
+          defaultOpen={false}
+        >
+          <div className="grid gap-2 text-sm md:grid-cols-2">
+            {report.selectedFiles.map((file) => (
+              <div key={file.path} className="rounded-md border px-3 py-2">
+                <p className="font-medium">{file.path}</p>
+                <p className="text-muted-foreground">{file.reason}</p>
+              </div>
+            ))}
+          </div>
+        </ReportAccordionSection>
       ) : null}
     </main>
   );

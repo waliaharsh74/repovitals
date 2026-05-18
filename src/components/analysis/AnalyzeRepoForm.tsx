@@ -3,9 +3,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Github, SearchCode } from "lucide-react";
+import {
+  CheckCircle2,
+  Gauge,
+  Github,
+  Network,
+  SearchCode,
+  ShieldAlert,
+  SlidersHorizontal,
+  TestTube2,
+  type LucideIcon,
+} from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import type { AnalysisProgressEvent, AnalysisProgressRecord } from "@/lib/analysis/progress";
+import {
+  ANALYSIS_AGENT_IDS,
+  DEFAULT_ANALYSIS_AGENT_IDS,
+  SELECTABLE_ANALYSIS_AGENTS,
+  areAllAnalysisAgentsSelected,
+  type AnalysisAgentId,
+} from "@/lib/agents/agentSelection";
 import { analyzeSchema, type AnalyzeInput } from "@/lib/validators/analyzeSchema";
 import { ApiKeyInput } from "@/components/analysis/ApiKeyInput";
 import { AnalysisStatus } from "@/components/analysis/AnalysisStatus";
@@ -19,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 type GithubRepoOption = {
   id: number;
@@ -38,6 +56,14 @@ type ApiError = {
 };
 
 type AnalysisState = "idle" | "queued" | "running" | "error" | "success";
+type AnalysisMode = "full" | "custom";
+
+const agentIcons: Record<AnalysisAgentId, LucideIcon> = {
+  architecture: Network,
+  security: ShieldAlert,
+  performance: Gauge,
+  testing: TestTube2,
+};
 
 export function AnalyzeRepoForm() {
   const router = useRouter();
@@ -48,8 +74,9 @@ export function AnalyzeRepoForm() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [repoOptions, setRepoOptions] = useState<GithubRepoOption[]>([]);
   const [reposLoading, setReposLoading] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("full");
   const [workflowSteps, setWorkflowSteps] = useState<AnalysisWorkflowStepState[]>(
-    createInitialWorkflowSteps,
+    () => createInitialWorkflowSteps(DEFAULT_ANALYSIS_AGENT_IDS),
   );
   const [showWorkflow, setShowWorkflow] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -58,6 +85,7 @@ export function AnalyzeRepoForm() {
     defaultValues: {
       apiKey: "",
       analysisDepth: "standard",
+      agentIds: [...DEFAULT_ANALYSIS_AGENT_IDS],
       repoUrl: "",
     },
   });
@@ -70,6 +98,10 @@ export function AnalyzeRepoForm() {
   const isSubmitting = form.formState.isSubmitting;
   const isAnalysisActive = analysisState === "queued" || analysisState === "running";
   const isFormDisabled = isSubmitting || isAnalysisActive;
+  const selectedAgentIds = form.watch("agentIds") ?? DEFAULT_ANALYSIS_AGENT_IDS;
+  const selectedAgentSet = new Set(selectedAgentIds);
+  const selectedAgentCount = selectedAgentSet.size;
+  const isFullAnalysisSelected = areAllAnalysisAgentsSelected(selectedAgentIds);
 
   useEffect(() => {
     async function loadRepos() {
@@ -95,13 +127,18 @@ export function AnalyzeRepoForm() {
     };
   }, []);
 
-  function applyProgressSnapshot(steps: AnalysisProgressRecord[]) {
-    setWorkflowSteps((current) => mergeWorkflowProgressRecords(current, steps));
+  function applyProgressSnapshot(
+    steps: AnalysisProgressRecord[],
+    snapshotAgentIds: AnalysisAgentId[],
+  ) {
+    setWorkflowSteps(
+      mergeWorkflowProgressRecords(createInitialWorkflowSteps(snapshotAgentIds), steps),
+    );
   }
 
   function applyProgressEvent(event: AnalysisProgressEvent) {
     if (event.type === "snapshot") {
-      applyProgressSnapshot(event.steps);
+      applyProgressSnapshot(event.steps, event.selectedAgentIds);
       setActiveJobId(event.jobId);
       setAnalysisState(
         event.status === "pending"
@@ -201,13 +238,50 @@ export function AnalyzeRepoForm() {
     };
   }
 
+  function updateAgentSelection(agentIds: AnalysisAgentId[]) {
+    const orderedAgentIds = ANALYSIS_AGENT_IDS.filter((agentId) => agentIds.includes(agentId));
+    form.setValue("agentIds", orderedAgentIds, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+
+    if (showWorkflow && !isAnalysisActive) {
+      setWorkflowSteps(createInitialWorkflowSteps(orderedAgentIds));
+    }
+  }
+
+  function chooseFullAnalysis() {
+    setAnalysisMode("full");
+    updateAgentSelection([...DEFAULT_ANALYSIS_AGENT_IDS]);
+  }
+
+  function chooseCustomAnalysis() {
+    setAnalysisMode("custom");
+    if (selectedAgentIds.length === 0) {
+      updateAgentSelection(["security"]);
+    }
+  }
+
+  function toggleAgent(agentId: AnalysisAgentId) {
+    const currentlySelected = selectedAgentSet.has(agentId);
+    if (currentlySelected && selectedAgentCount === 1) {
+      return;
+    }
+
+    updateAgentSelection(
+      currentlySelected
+        ? selectedAgentIds.filter((selectedAgentId) => selectedAgentId !== agentId)
+        : [...selectedAgentIds, agentId],
+    );
+  }
+
   async function onSubmit(values: AnalyzeInput) {
     setSubmitError(null);
     setConnectGithubPrompt(false);
     setStatusMessage("Validating request...");
     setAnalysisState("queued");
     setActiveJobId(null);
-    setWorkflowSteps(createInitialWorkflowSteps());
+    setWorkflowSteps(createInitialWorkflowSteps(values.agentIds));
     setShowWorkflow(true);
 
     try {
@@ -282,6 +356,121 @@ export function AnalyzeRepoForm() {
               </label>
             )}
           />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <Label>Review agents</Label>
+              <span className="text-xs font-medium text-muted-foreground">
+                {selectedAgentCount} of {DEFAULT_ANALYSIS_AGENT_IDS.length} selected
+              </span>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                className={cn(
+                  "flex min-h-24 items-start gap-3 rounded-md border bg-background p-3 text-left transition-colors",
+                  analysisMode === "full" && isFullAnalysisSelected
+                    ? "border-primary bg-primary/5"
+                    : "hover:bg-muted/40",
+                )}
+                disabled={isFormDisabled}
+                onClick={chooseFullAnalysis}
+              >
+                <CheckCircle2
+                  className={cn(
+                    "mt-0.5 size-4 shrink-0",
+                    analysisMode === "full" && isFullAnalysisSelected
+                      ? "text-primary"
+                      : "text-muted-foreground",
+                  )}
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium">Full analysis</span>
+                  <span className="block text-xs leading-5 text-muted-foreground">
+                    Run every review agent for the broadest production-readiness report.
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className={cn(
+                  "flex min-h-24 items-start gap-3 rounded-md border bg-background p-3 text-left transition-colors",
+                  analysisMode === "custom" ? "border-primary bg-primary/5" : "hover:bg-muted/40",
+                )}
+                disabled={isFormDisabled}
+                onClick={chooseCustomAnalysis}
+              >
+                <SlidersHorizontal
+                  className={cn(
+                    "mt-0.5 size-4 shrink-0",
+                    analysisMode === "custom" ? "text-primary" : "text-muted-foreground",
+                  )}
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium">Custom selection</span>
+                  <span className="block text-xs leading-5 text-muted-foreground">
+                    Pick the agents that match the repository questions you want answered.
+                  </span>
+                </span>
+              </button>
+            </div>
+
+            {analysisMode === "custom" ? (
+              <div className="grid gap-2">
+                {SELECTABLE_ANALYSIS_AGENTS.map((agent) => {
+                  const Icon = agentIcons[agent.id];
+                  const checked = selectedAgentSet.has(agent.id);
+                  const canToggle = !isFormDisabled && (!checked || selectedAgentCount > 1);
+
+                  return (
+                    <label
+                      key={agent.id}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-3 rounded-md border bg-background p-3 text-sm transition-colors",
+                        checked ? "border-primary bg-primary/5" : "hover:bg-muted/40",
+                        !canToggle && "cursor-not-allowed opacity-70",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={checked}
+                        disabled={!canToggle}
+                        onChange={() => toggleAgent(agent.id)}
+                      />
+                      <Icon
+                        className={cn(
+                          "mt-0.5 size-4 shrink-0",
+                          checked ? "text-primary" : "text-muted-foreground",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="block font-medium">{agent.label}</span>
+                        <span className="block text-xs leading-5 text-muted-foreground">
+                          {agent.description}
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "mt-0.5 grid size-4 shrink-0 place-items-center rounded-sm border",
+                          checked ? "border-primary bg-primary text-primary-foreground" : "bg-background",
+                        )}
+                      >
+                        {checked ? <CheckCircle2 className="size-3" /> : null}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {form.formState.errors.agentIds ? (
+              <p className="text-sm text-destructive">{form.formState.errors.agentIds.message}</p>
+            ) : null}
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="repoPicker">Your GitHub repositories</Label>

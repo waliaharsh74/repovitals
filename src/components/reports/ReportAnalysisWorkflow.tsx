@@ -42,7 +42,10 @@ function statusMessageForStatus(status: AnalysisJobStatus): string {
 }
 
 function workflowStepsFromSnapshot(snapshot: AnalysisJobSnapshot): AnalysisWorkflowStepState[] {
-  return mergeWorkflowProgressRecords(createInitialWorkflowSteps(), snapshot.progress);
+  return mergeWorkflowProgressRecords(
+    createInitialWorkflowSteps(snapshot.selectedAgentIds),
+    snapshot.progress,
+  );
 }
 
 export function ReportAnalysisWorkflow({
@@ -114,7 +117,12 @@ export function ReportAnalysisWorkflow({
 
     function applyProgressEvent(event: AnalysisProgressEvent) {
       if (event.type === "snapshot") {
-        setWorkflowSteps((current) => mergeWorkflowProgressRecords(current, event.steps));
+        setWorkflowSteps(
+          mergeWorkflowProgressRecords(
+            createInitialWorkflowSteps(event.selectedAgentIds),
+            event.steps,
+          ),
+        );
         setJobStatus(event.status);
         setErrorMessage(null);
         if (event.status !== "pending" && event.status !== "running") {

@@ -2,11 +2,12 @@
 
 import { AlertCircle, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import {
-  ANALYSIS_WORKFLOW_STEPS,
   type AnalysisProgressRecord,
   type AnalysisProgressStatus,
   type AnalysisWorkflowStepId,
+  getAnalysisWorkflowSteps,
 } from "@/lib/analysis/progress";
+import type { AnalysisAgentId } from "@/lib/agents/agentSelection";
 import { cn } from "@/lib/utils";
 
 export type AnalysisWorkflowStepState = {
@@ -22,8 +23,10 @@ export type AnalysisWorkflowStepState = {
   updatedAt?: string;
 };
 
-export function createInitialWorkflowSteps(): AnalysisWorkflowStepState[] {
-  return ANALYSIS_WORKFLOW_STEPS.map((step) => ({
+export function createInitialWorkflowSteps(
+  selectedAgentIds?: AnalysisAgentId[],
+): AnalysisWorkflowStepState[] {
+  return getAnalysisWorkflowSteps(selectedAgentIds).map((step) => ({
     ...step,
     status: "pending",
   }));

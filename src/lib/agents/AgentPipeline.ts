@@ -1,6 +1,10 @@
 import { REPO_ANALYSIS_LIMITS, type RepoAnalysisLimits } from "@/lib/ai/tokenBudget";
 import type { AIProvider } from "@/lib/ai/providers/AIProvider";
 import type { AnalysisWorkflowStepId, EmitAnalysisProgress } from "@/lib/analysis/progress";
+import {
+  DEFAULT_ANALYSIS_AGENT_IDS,
+  type AnalysisAgentId,
+} from "@/lib/agents/agentSelection";
 import { runArchitectureAgent } from "@/lib/agents/ArchitectureAgent";
 import { runFileClassifierAgent } from "@/lib/agents/FileClassifierAgent";
 import { runPerformanceAgent } from "@/lib/agents/PerformanceAgent";
@@ -21,6 +25,7 @@ type PipelineInput = {
   repo: RepoContext;
   files: SelectedRepoFile[];
   limits?: RepoAnalysisLimits;
+  selectedAgentIds?: AnalysisAgentId[];
   onProgress?: EmitAnalysisProgress;
 };
 
@@ -50,6 +55,8 @@ function fallbackDiagram(repo: RepoContext): string {
 
 export async function runAgentPipeline(input: PipelineInput): Promise<AnalysisReport> {
   const limits = input.limits ?? REPO_ANALYSIS_LIMITS;
+  const selectedAgentIds = input.selectedAgentIds ?? DEFAULT_ANALYSIS_AGENT_IDS;
+  const selectedAgents = new Set<AnalysisAgentId>(selectedAgentIds);
   const trace: AgentTraceStep[] = [];
   const findings: Finding[] = [];
   const recommendations: string[] = [];
@@ -102,58 +109,66 @@ export async function runAgentPipeline(input: PipelineInput): Promise<AnalysisRe
     runFileClassifierAgent({ repo: input.repo, files: input.files });
   });
 
-  const architecture = await runStep<AgentOutput>(
-    "ArchitectureAgent",
-    "architecture-agent",
-    "Reviewing architecture and maintainability.",
-    () =>
-      runArchitectureAgent({
+  if (selectedAgents.has("architecture")) {
+    const architecture = await runStep<AgentOutput>(
+      "ArchitectureAgent",
+      "architecture-agent",
+      "Reviewing architecture and maintainability.",
+      () =>
+        runArchitectureAgent({
+          provider: input.provider,
+          repo: input.repo,
+          files: input.files,
+          previousFindings: findings,
+        }),
+    );
+    architectureDiagramMermaid = architecture.architectureDiagramMermaid ?? architectureDiagramMermaid;
+    findings.push(...architecture.findings);
+    recommendations.push(...(architecture.recommendations ?? []));
+  }
+
+  if (selectedAgents.has("security")) {
+    const security = await runStep<AgentOutput>("SecurityAgent", "security-agent", "Reviewing security risks.", () =>
+      runSecurityAgent({
         provider: input.provider,
         repo: input.repo,
         files: input.files,
         previousFindings: findings,
       }),
-  );
-  architectureDiagramMermaid = architecture.architectureDiagramMermaid ?? architectureDiagramMermaid;
-  findings.push(...architecture.findings);
-  recommendations.push(...(architecture.recommendations ?? []));
+    );
+    findings.push(...security.findings);
+    recommendations.push(...(security.recommendations ?? []));
+  }
 
-  const security = await runStep<AgentOutput>("SecurityAgent", "security-agent", "Reviewing security risks.", () =>
-    runSecurityAgent({
-      provider: input.provider,
-      repo: input.repo,
-      files: input.files,
-      previousFindings: findings,
-    }),
-  );
-  findings.push(...security.findings);
-  recommendations.push(...(security.recommendations ?? []));
+  if (selectedAgents.has("performance")) {
+    const performance = await runStep<AgentOutput>(
+      "PerformanceAgent",
+      "performance-agent",
+      "Reviewing performance and scalability risks.",
+      () =>
+        runPerformanceAgent({
+          provider: input.provider,
+          repo: input.repo,
+          files: input.files,
+          previousFindings: findings,
+        }),
+    );
+    findings.push(...performance.findings);
+    recommendations.push(...(performance.recommendations ?? []));
+  }
 
-  const performance = await runStep<AgentOutput>(
-    "PerformanceAgent",
-    "performance-agent",
-    "Reviewing performance and scalability risks.",
-    () =>
-      runPerformanceAgent({
+  if (selectedAgents.has("testing")) {
+    const testing = await runStep<AgentOutput>("TestingAgent", "testing-agent", "Reviewing testability gaps.", () =>
+      runTestingAgent({
         provider: input.provider,
         repo: input.repo,
         files: input.files,
         previousFindings: findings,
       }),
-  );
-  findings.push(...performance.findings);
-  recommendations.push(...(performance.recommendations ?? []));
-
-  const testing = await runStep<AgentOutput>("TestingAgent", "testing-agent", "Reviewing testability gaps.", () =>
-    runTestingAgent({
-      provider: input.provider,
-      repo: input.repo,
-      files: input.files,
-      previousFindings: findings,
-    }),
-  );
-  findings.push(...testing.findings);
-  recommendations.push(...(testing.recommendations ?? []));
+    );
+    findings.push(...testing.findings);
+    recommendations.push(...(testing.recommendations ?? []));
+  }
 
   const cappedFindings = sortAndCapFindings(findings, limits);
   const synthesis = await runStep("ReportSynthesisAgent", "report-synthesis", "Synthesizing final report.", () =>
@@ -162,6 +177,7 @@ export async function runAgentPipeline(input: PipelineInput): Promise<AnalysisRe
       repo: input.repo,
       findings: cappedFindings,
       recommendations,
+      selectedAgentIds,
     }),
   );
 

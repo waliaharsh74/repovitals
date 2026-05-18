@@ -11,6 +11,7 @@ describe("analyzeSchema", () => {
     ).toEqual({
       apiKey: "sk-test",
       analysisDepth: "standard",
+      agentIds: ["architecture", "security", "performance", "testing"],
       repoUrl: "owner/repo",
     });
   });
@@ -23,6 +24,26 @@ describe("analyzeSchema", () => {
         repoUrl: "owner/repo",
       }).analysisDepth,
     ).toBe("expanded");
+  });
+
+  it("accepts a custom agent selection", () => {
+    expect(
+      analyzeSchema.parse({
+        apiKey: "sk-test",
+        agentIds: ["security", "testing"],
+        repoUrl: "owner/repo",
+      }).agentIds,
+    ).toEqual(["security", "testing"]);
+  });
+
+  it("rejects an empty agent selection", () => {
+    expect(() =>
+      analyzeSchema.parse({
+        apiKey: "sk-test",
+        agentIds: [],
+        repoUrl: "owner/repo",
+      }),
+    ).toThrow();
   });
 
   it("rejects missing key and invalid repo URL", () => {

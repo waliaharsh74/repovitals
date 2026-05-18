@@ -131,6 +131,7 @@ model AnalysisJob {
   queueJobId    String? @unique
   repoUrl       String
   analysisDepth String
+  selectedAgentsJson Json?
 
   encryptedApiKey String? @db.Text
 

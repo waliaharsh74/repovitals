@@ -1,6 +1,7 @@
 import type { AIProvider } from "@/lib/ai/providers/AIProvider";
 import { reportSystemPrompt, reportUserPrompt } from "@/lib/ai/prompts/reportPrompt";
 import { reportSynthesisSchema } from "@/lib/agents/schemas";
+import type { AnalysisAgentId } from "@/lib/agents/agentSelection";
 import type { Finding, RepoContext, Scorecard } from "@/lib/agents/types";
 
 export async function runReportSynthesisAgent(input: {
@@ -8,6 +9,7 @@ export async function runReportSynthesisAgent(input: {
   repo: RepoContext;
   findings: Finding[];
   recommendations: string[];
+  selectedAgentIds: AnalysisAgentId[];
 }): Promise<{
   summary: string;
   scorecard: Scorecard;
@@ -15,7 +17,12 @@ export async function runReportSynthesisAgent(input: {
 }> {
   return input.provider.generateObject({
     system: reportSystemPrompt(),
-    prompt: reportUserPrompt(input.repo, input.findings, input.recommendations),
+    prompt: reportUserPrompt(
+      input.repo,
+      input.findings,
+      input.recommendations,
+      input.selectedAgentIds,
+    ),
     schema: reportSynthesisSchema,
     temperature: 0.1,
     maxTokens: 1800,

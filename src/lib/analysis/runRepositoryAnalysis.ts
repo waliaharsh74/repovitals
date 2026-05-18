@@ -7,6 +7,10 @@ import {
 import type { EmitAnalysisProgress } from "@/lib/analysis/progress";
 import type { RepoContext, SelectedRepoFile } from "@/lib/agents/types";
 import { runAgentPipeline } from "@/lib/agents/AgentPipeline";
+import {
+  DEFAULT_ANALYSIS_AGENT_IDS,
+  type AnalysisAgentId,
+} from "@/lib/agents/agentSelection";
 import { parseGithubUrl } from "@/lib/github/parseGithubUrl";
 import { fetchFileContent } from "@/lib/github/fetchFileContent";
 import { fetchRepoTree } from "@/lib/github/fetchRepoTree";
@@ -166,6 +170,7 @@ export async function prepareRepositoryAnalysis(input: {
 export async function runPreparedRepositoryAnalysis(input: {
   apiKey: string;
   prepared: PreparedRepositoryAnalysis;
+  selectedAgentIds?: AnalysisAgentId[];
   onProgress?: EmitAnalysisProgress;
   signal?: AbortSignal;
 }): Promise<RepositoryAnalysisResult> {
@@ -176,6 +181,7 @@ export async function runPreparedRepositoryAnalysis(input: {
     repo: input.prepared.repoContext,
     files: input.prepared.files,
     limits: input.prepared.limits,
+    selectedAgentIds: input.selectedAgentIds ?? DEFAULT_ANALYSIS_AGENT_IDS,
     onProgress: input.onProgress,
   });
 
@@ -190,6 +196,7 @@ export async function runRepositoryAnalysis(input: {
   apiKey: string;
   repoUrl: string;
   analysisDepth?: AnalysisDepth;
+  selectedAgentIds?: AnalysisAgentId[];
   onProgress?: EmitAnalysisProgress;
   signal?: AbortSignal;
 }): Promise<RepositoryAnalysisResult> {
@@ -202,6 +209,7 @@ export async function runRepositoryAnalysis(input: {
   return runPreparedRepositoryAnalysis({
     apiKey: input.apiKey,
     prepared,
+    selectedAgentIds: input.selectedAgentIds,
     onProgress: input.onProgress,
     signal: input.signal,
   });

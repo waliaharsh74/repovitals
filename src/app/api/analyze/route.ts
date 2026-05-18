@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       repoUrl: input.repoUrl,
       apiKey: input.apiKey,
       analysisDepth: input.analysisDepth,
+      agentIds: input.agentIds,
     });
 
     try {
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
       reportId: job.reportId,
       userId: user.id,
       analysisDepth: input.analysisDepth,
+      agentIds: input.agentIds,
       durationMs: Date.now() - startedAt,
     });
 

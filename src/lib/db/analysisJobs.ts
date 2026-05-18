@@ -8,6 +8,11 @@ import {
   decryptAnalysisSecret,
   encryptAnalysisSecret,
 } from "@/lib/analysis/jobSecrets";
+import {
+  DEFAULT_ANALYSIS_AGENT_IDS,
+  normalizeAnalysisAgentIds,
+  type AnalysisAgentId,
+} from "@/lib/agents/agentSelection";
 import type {
   AnalysisJobStatus,
   AnalysisJobSnapshot,
@@ -40,6 +45,7 @@ type AnalysisJobSnapshotRow = {
   errorCode: string | null;
   errorMessage: string | null;
   queueJobId: string | null;
+  selectedAgentsJson: unknown;
   progress: ProgressRow[];
 };
 
@@ -49,6 +55,7 @@ export type AnalysisJobWorkerRecord = {
   userId: string | null;
   repoUrl: string;
   analysisDepth: AnalysisDepth;
+  selectedAgentIds: AnalysisAgentId[];
   apiKey: string;
   attempt: number;
   maxAttempts: number;
@@ -81,6 +88,7 @@ function toAnalysisJobSnapshot(job: AnalysisJobSnapshotRow): AnalysisJobSnapshot
     errorCode: job.errorCode,
     errorMessage: job.errorMessage,
     queueJobId: job.queueJobId,
+    selectedAgentIds: normalizeAnalysisAgentIds(job.selectedAgentsJson),
     progress: job.progress.map(toProgressRecord),
   };
 }
@@ -90,12 +98,14 @@ export async function createPendingAnalysisJob(input: {
   repoUrl: string;
   apiKey: string;
   analysisDepth: AnalysisDepth;
+  agentIds?: AnalysisAgentId[];
 }) {
   const parsed = parseGithubUrl(input.repoUrl);
   const encryptedApiKey = encryptAnalysisSecret(input.apiKey);
   const now = new Date();
   const maxAttempts = getAnalysisJobAttempts();
   const timeoutMs = getAnalysisJobTimeoutMs();
+  const selectedAgentIds = input.agentIds?.length ? input.agentIds : DEFAULT_ANALYSIS_AGENT_IDS;
 
   return prisma.$transaction(async (tx) => {
     const repository = await tx.repository.upsert({
@@ -129,6 +139,7 @@ export async function createPendingAnalysisJob(input: {
         userId: input.userId,
         repoUrl: parsed.normalizedUrl,
         analysisDepth: input.analysisDepth,
+        selectedAgentsJson: selectedAgentIds as never,
         encryptedApiKey,
         status: "pending",
         maxAttempts,
@@ -140,6 +151,7 @@ export async function createPendingAnalysisJob(input: {
                 step: "validate-input",
                 status: "completed",
                 message: "Inputs validated. OpenAI key was encrypted for this queued analysis job.",
+                detail: `Selected agents: ${selectedAgentIds.join(", ")}.`,
                 completedAt: now,
               },
               {
@@ -259,6 +271,7 @@ export async function startAnalysisJob(jobId: string, attempt: number): Promise<
       userId: job.userId,
       repoUrl: job.repoUrl,
       analysisDepth: job.analysisDepth as AnalysisDepth,
+      selectedAgentIds: normalizeAnalysisAgentIds(job.selectedAgentsJson),
       apiKey: decryptAnalysisSecret(job.encryptedApiKey),
       attempt: job.attempt,
       maxAttempts: job.maxAttempts,

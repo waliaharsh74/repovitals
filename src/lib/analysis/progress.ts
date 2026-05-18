@@ -1,3 +1,9 @@
+import {
+  DEFAULT_ANALYSIS_AGENT_IDS,
+  SELECTABLE_ANALYSIS_AGENTS,
+  type AnalysisAgentId,
+} from "@/lib/agents/agentSelection";
+
 export type AnalysisWorkflowStepId =
   | "validate-input"
   | "fetch-tree"
@@ -44,6 +50,7 @@ export type AnalysisJobSnapshot = {
   errorCode: string | null;
   errorMessage: string | null;
   queueJobId: string | null;
+  selectedAgentIds: AnalysisAgentId[];
   progress: AnalysisProgressRecord[];
 };
 
@@ -54,6 +61,7 @@ export type AnalysisProgressEvent =
       jobId: string;
       reportId: string;
       status: AnalysisJobStatus;
+      selectedAgentIds: AnalysisAgentId[];
       steps: AnalysisProgressRecord[];
       message?: string;
     }
@@ -139,3 +147,21 @@ export const ANALYSIS_WORKFLOW_STEPS: {
     description: "Persist findings, recommendations, selected file metadata, and agent trace.",
   },
 ];
+
+const SELECTABLE_AGENT_STEP_IDS = new Set(
+  SELECTABLE_ANALYSIS_AGENTS.map((agent) => agent.workflowStepId),
+);
+
+export function getAnalysisWorkflowSteps(
+  selectedAgentIds: AnalysisAgentId[] = DEFAULT_ANALYSIS_AGENT_IDS,
+): typeof ANALYSIS_WORKFLOW_STEPS {
+  const selectedAgentStepIds = new Set(
+    SELECTABLE_ANALYSIS_AGENTS.filter((agent) => selectedAgentIds.includes(agent.id)).map(
+      (agent) => agent.workflowStepId,
+    ),
+  );
+
+  return ANALYSIS_WORKFLOW_STEPS.filter(
+    (step) => !SELECTABLE_AGENT_STEP_IDS.has(step.id) || selectedAgentStepIds.has(step.id),
+  );
+}

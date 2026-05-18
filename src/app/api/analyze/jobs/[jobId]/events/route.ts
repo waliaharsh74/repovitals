@@ -153,6 +153,7 @@ export async function GET(
               jobId: snapshot.jobId,
               reportId: snapshot.reportId,
               status: snapshot.status,
+              selectedAgentIds: snapshot.selectedAgentIds,
               steps: snapshot.progress,
               message:
                 snapshot.status === "pending"
@@ -210,6 +211,7 @@ export async function GET(
         jobId: initialSnapshot.jobId,
         reportId: initialSnapshot.reportId,
         status: initialSnapshot.status,
+        selectedAgentIds: initialSnapshot.selectedAgentIds,
         steps: initialSnapshot.progress,
         message: initialMessage,
       })) {
