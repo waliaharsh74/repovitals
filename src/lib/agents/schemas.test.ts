@@ -47,7 +47,7 @@ describe("reportSynthesisSchema", () => {
       recommendations: {
         security: [
           "Validate external inputs before fetching repository resources.",
-          "Keep provider keys scoped to a single request and redact them from logs.",
+          "Keep OpenAI keys scoped to a single request and redact them from logs.",
         ],
         testing: "Add integration tests for the analysis API failure paths.",
       },
@@ -55,14 +55,14 @@ describe("reportSynthesisSchema", () => {
 
     expect(parsed.recommendations).toEqual([
       "Validate external inputs before fetching repository resources.",
-      "Keep provider keys scoped to a single request and redact them from logs.",
+      "Keep OpenAI keys scoped to a single request and redact them from logs.",
       "Add integration tests for the analysis API failure paths.",
     ]);
   });
 });
 
 describe("findingSchema", () => {
-  it("normalizes provider lineHint zero to an absent optional line hint", () => {
+  it("normalizes model lineHint zero to an absent optional line hint", () => {
     const parsed = findingSchema.parse({
       ...baseFinding,
       lineHint: 0,
@@ -71,7 +71,7 @@ describe("findingSchema", () => {
     expect(parsed.lineHint).toBeUndefined();
   });
 
-  it("accepts positive lineHint strings from provider JSON", () => {
+  it("accepts positive lineHint strings from model JSON", () => {
     const parsed = findingSchema.parse({
       ...baseFinding,
       lineHint: "42",

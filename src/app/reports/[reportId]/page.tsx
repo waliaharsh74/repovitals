@@ -4,10 +4,12 @@ import { AgentTrace } from "@/components/reports/AgentTrace";
 import { ArchitectureDiagram } from "@/components/reports/ArchitectureDiagram";
 import { FindingsTable } from "@/components/reports/FindingsTable";
 import { Recommendations } from "@/components/reports/Recommendations";
+import { ReportAnalysisWorkflow } from "@/components/reports/ReportAnalysisWorkflow";
 import { ReportHeader } from "@/components/reports/ReportHeader";
 import { ScoreCards } from "@/components/reports/ScoreCards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getAnalysisJobSnapshotForReport } from "@/lib/db/analysisJobs";
 import { getReportById } from "@/lib/db/reports";
 
 export const dynamic = "force-dynamic";
@@ -49,17 +51,15 @@ export default async function ReportPage({
   }
 
   if (!report.scorecard || !report.summary || !report.mermaidDiagram) {
+    const analysisJob = await getAnalysisJobSnapshotForReport({
+      reportId,
+      userId: user.id,
+    });
+
     return (
       <main className="container space-y-8 py-10">
         <ReportHeader report={report} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Report is still running</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground">
-            This analysis is still running in the background. Progress is available from the analysis page.
-          </CardContent>
-        </Card>
+        <ReportAnalysisWorkflow initialSnapshot={analysisJob} />
       </main>
     );
   }

@@ -112,7 +112,6 @@ export async function runAnalysisQueueJob(job: Job<AnalysisQueueJobData>) {
     });
 
     const analysis = await runPreparedRepositoryAnalysis({
-      provider: analysisJob.provider,
       apiKey: analysisJob.apiKey,
       prepared,
       onProgress: emitProgress,
@@ -141,7 +140,6 @@ export async function runAnalysisQueueJob(job: Job<AnalysisQueueJobData>) {
       jobId: analysisJob.id,
       reportId: analysisJob.reportId,
       repo: `${analysis.repository.owner}/${analysis.repository.name}`,
-      provider: analysisJob.provider,
       userId: analysisJob.userId,
       analysisDepth: analysisJob.analysisDepth,
       filesSelected: analysis.selectedFiles.length,

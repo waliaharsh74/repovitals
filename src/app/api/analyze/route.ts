@@ -60,7 +60,6 @@ export async function POST(request: Request) {
     const job = await createPendingAnalysisJob({
       userId: user.id,
       repoUrl: input.repoUrl,
-      provider: input.provider,
       apiKey: input.apiKey,
       analysisDepth: input.analysisDepth,
     });
@@ -89,7 +88,6 @@ export async function POST(request: Request) {
     logger.info("analysis.enqueued", {
       jobId: job.jobId,
       reportId: job.reportId,
-      provider: input.provider,
       userId: user.id,
       analysisDepth: input.analysisDepth,
       durationMs: Date.now() - startedAt,

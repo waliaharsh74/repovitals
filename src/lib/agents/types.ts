@@ -1,5 +1,3 @@
-export type AIProviderName = "openai" | "groq";
-
 export type AnalysisCategory =
   | "architecture"
   | "security"

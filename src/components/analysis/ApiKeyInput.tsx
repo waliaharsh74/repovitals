@@ -15,7 +15,7 @@ export function ApiKeyInput({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="apiKey">Provider API key</Label>
+      <Label htmlFor="apiKey">OpenAI API key</Label>
       <div className="relative">
         <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -26,11 +26,11 @@ export function ApiKeyInput({
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
           className="pl-9"
-          placeholder="Paste key for this analysis"
+          placeholder="Paste OpenAI key for this analysis"
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Your provider key is used only for this analysis and is not stored.
+        Your OpenAI key is used only for this analysis and is not stored.
       </p>
     </div>
   );

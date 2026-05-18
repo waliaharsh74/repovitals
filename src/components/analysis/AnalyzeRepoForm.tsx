@@ -12,9 +12,9 @@ import { AnalysisStatus } from "@/components/analysis/AnalysisStatus";
 import {
   AnalysisWorkflow,
   createInitialWorkflowSteps,
+  mergeWorkflowProgressRecords,
   type AnalysisWorkflowStepState,
 } from "@/components/analysis/AnalysisWorkflow";
-import { ProviderSelector } from "@/components/analysis/ProviderSelector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -56,7 +56,6 @@ export function AnalyzeRepoForm() {
   const form = useForm<AnalyzeInput>({
     resolver: zodResolver(analyzeSchema),
     defaultValues: {
-      provider: "openai",
       apiKey: "",
       analysisDepth: "standard",
       repoUrl: "",
@@ -97,25 +96,7 @@ export function AnalyzeRepoForm() {
   }, []);
 
   function applyProgressSnapshot(steps: AnalysisProgressRecord[]) {
-    setWorkflowSteps((current) =>
-      current.map((step) => {
-        const persisted = steps.find((item) => item.step === step.id);
-        if (!persisted) {
-          return step;
-        }
-
-        return {
-          ...step,
-          status: persisted.status,
-          message: persisted.message,
-          detail: persisted.detail ?? undefined,
-          startedAt: persisted.startedAt ?? undefined,
-          completedAt: persisted.completedAt ?? undefined,
-          failedAt: persisted.failedAt ?? undefined,
-          updatedAt: persisted.updatedAt,
-        };
-      }),
-    );
+    setWorkflowSteps((current) => mergeWorkflowProgressRecords(current, steps));
   }
 
   function applyProgressEvent(event: AnalysisProgressEvent) {
@@ -270,14 +251,6 @@ export function AnalyzeRepoForm() {
         <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
           <Controller
             control={form.control}
-            name="provider"
-            render={({ field }) => (
-              <ProviderSelector value={field.value} onChange={field.onChange} disabled={isFormDisabled} />
-            )}
-          />
-
-          <Controller
-            control={form.control}
             name="apiKey"
             render={({ field }) => (
               <ApiKeyInput value={field.value} onChange={field.onChange} disabled={isFormDisabled} />
@@ -302,7 +275,7 @@ export function AnalyzeRepoForm() {
                 <span className="space-y-1">
                   <span className="block font-medium">Expanded coverage</span>
                   <span className="block text-muted-foreground">
-                    Use more of this provider key with higher file, character, and finding caps. Hard
+                    Use more of this OpenAI key with higher file, character, and finding caps. Hard
                     safety caps still apply to prevent runaway spend.
                   </span>
                 </span>

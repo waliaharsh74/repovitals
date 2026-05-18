@@ -21,8 +21,8 @@ export default function AnalyzePage() {
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             "Hard limits protect token spend.",
-            "Provider calls go through adapters.",
-            "Raw provider keys are never stored.",
+            "OpenAI calls use structured outputs.",
+            "Raw OpenAI keys are never stored.",
             "Reports survive refresh through Postgres.",
           ].map((item) => (
             <div key={item} className="rounded-md border px-4 py-3 text-sm">

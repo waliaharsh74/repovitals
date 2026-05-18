@@ -10,12 +10,12 @@ import {
 } from "@/lib/analysis/jobSecrets";
 import type {
   AnalysisJobStatus,
+  AnalysisJobSnapshot,
   AnalysisProgressPayload,
   AnalysisProgressRecord,
   AnalysisWorkflowStepId,
 } from "@/lib/analysis/progress";
 import type { AnalysisDepth } from "@/lib/ai/tokenBudget";
-import type { AIProviderName } from "@/lib/agents/types";
 import {
   AnalysisCancelledError,
   AnalysisFailedError,
@@ -33,12 +33,21 @@ type ProgressRow = {
   updatedAt: Date;
 };
 
+type AnalysisJobSnapshotRow = {
+  id: string;
+  reportId: string;
+  status: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  queueJobId: string | null;
+  progress: ProgressRow[];
+};
+
 export type AnalysisJobWorkerRecord = {
   id: string;
   reportId: string;
   userId: string | null;
   repoUrl: string;
-  provider: AIProviderName;
   analysisDepth: AnalysisDepth;
   apiKey: string;
   attempt: number;
@@ -64,10 +73,21 @@ function toProgressRecord(row: ProgressRow): AnalysisProgressRecord {
   };
 }
 
+function toAnalysisJobSnapshot(job: AnalysisJobSnapshotRow): AnalysisJobSnapshot {
+  return {
+    jobId: job.id,
+    reportId: job.reportId,
+    status: job.status as AnalysisJobStatus,
+    errorCode: job.errorCode,
+    errorMessage: job.errorMessage,
+    queueJobId: job.queueJobId,
+    progress: job.progress.map(toProgressRecord),
+  };
+}
+
 export async function createPendingAnalysisJob(input: {
   userId: string;
   repoUrl: string;
-  provider: AIProviderName;
   apiKey: string;
   analysisDepth: AnalysisDepth;
 }) {
@@ -99,7 +119,6 @@ export async function createPendingAnalysisJob(input: {
       data: {
         repositoryId: repository.id,
         userId: input.userId,
-        provider: input.provider,
         status: "pending",
       },
     });
@@ -109,7 +128,6 @@ export async function createPendingAnalysisJob(input: {
         reportId: report.id,
         userId: input.userId,
         repoUrl: parsed.normalizedUrl,
-        provider: input.provider,
         analysisDepth: input.analysisDepth,
         encryptedApiKey,
         status: "pending",
@@ -121,7 +139,7 @@ export async function createPendingAnalysisJob(input: {
               {
                 step: "validate-input",
                 status: "completed",
-                message: "Inputs validated. Provider key was encrypted for this queued analysis job.",
+                message: "Inputs validated. OpenAI key was encrypted for this queued analysis job.",
                 completedAt: now,
               },
               {
@@ -240,7 +258,6 @@ export async function startAnalysisJob(jobId: string, attempt: number): Promise<
       reportId: job.reportId,
       userId: job.userId,
       repoUrl: job.repoUrl,
-      provider: job.provider as AIProviderName,
       analysisDepth: job.analysisDepth as AnalysisDepth,
       apiKey: decryptAnalysisSecret(job.encryptedApiKey),
       attempt: job.attempt,
@@ -498,15 +515,27 @@ export async function getAnalysisJobSnapshot(input: { jobId: string; userId: str
     return null;
   }
 
-  return {
-    jobId: job.id,
-    reportId: job.reportId,
-    status: job.status as AnalysisJobStatus,
-    errorCode: job.errorCode,
-    errorMessage: job.errorMessage,
-    queueJobId: job.queueJobId,
-    progress: job.progress.map(toProgressRecord),
-  };
+  return toAnalysisJobSnapshot(job);
+}
+
+export async function getAnalysisJobSnapshotForReport(input: { reportId: string; userId: string }) {
+  const job = await prisma.analysisJob.findFirst({
+    where: {
+      reportId: input.reportId,
+      userId: input.userId,
+    },
+    include: {
+      progress: {
+        orderBy: [{ createdAt: "asc" }, { updatedAt: "asc" }],
+      },
+    },
+  });
+
+  if (!job) {
+    return null;
+  }
+
+  return toAnalysisJobSnapshot(job);
 }
 
 export async function getAnalysisJobQueueIdentity(input: { jobId: string; userId: string }) {

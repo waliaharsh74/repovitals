@@ -37,6 +37,16 @@ export type AnalysisProgressRecord = {
   updatedAt: string;
 };
 
+export type AnalysisJobSnapshot = {
+  jobId: string;
+  reportId: string;
+  status: AnalysisJobStatus;
+  errorCode: string | null;
+  errorMessage: string | null;
+  queueJobId: string | null;
+  progress: AnalysisProgressRecord[];
+};
+
 export type AnalysisProgressEvent =
   | ({ type: "progress" } & AnalysisProgressPayload)
   | {
@@ -71,7 +81,7 @@ export const ANALYSIS_WORKFLOW_STEPS: {
   {
     id: "validate-input",
     label: "Validate request",
-    description: "Check provider, key presence, and GitHub repo format.",
+    description: "Check OpenAI key presence and GitHub repo format.",
   },
   {
     id: "fetch-tree",

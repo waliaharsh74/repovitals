@@ -2,7 +2,7 @@
 
 **RepoVitals** is an agentic GitHub repository review platform.
 
-Sign in with Google or GitHub, paste a public GitHub repository, choose OpenAI or Groq, enter a provider API key for the current run, and get a persisted production-readiness report covering architecture, security, performance, maintainability, and testability.
+Sign in with GitHub, paste a public GitHub repository, enter an OpenAI API key for the current run, and get a persisted production-readiness report covering architecture, security, performance, maintainability, and testability.
 
 Tagline:
 
@@ -16,14 +16,14 @@ Implemented:
 
 - Next.js App Router + TypeScript + Tailwind
 - shadcn-style UI primitives
-- Google and GitHub OAuth login through NextAuth
+- GitHub OAuth login through NextAuth
 - authenticated dashboard for saved reports
 - React Hook Form + Zod analyze form
 - Prisma + PostgreSQL persistence
 - public GitHub repository URL parsing
 - GitHub metadata, tree, and raw file ingestion
 - bounded smart file selection
-- OpenAI and Groq provider adapters behind `AIProvider`
+- OpenAI structured-output adapter behind `AIProvider`
 - deterministic file classifier
 - architecture, security, performance, testing, and synthesis agents
 - Redis-backed asynchronous analysis jobs
@@ -35,7 +35,7 @@ Implemented:
 Not included in MVP:
 
 - private repositories
-- saved provider keys
+- saved OpenAI keys
 - payments
 - WebSockets
 - GitHub issue or PR creation
@@ -47,17 +47,15 @@ Not included in MVP:
 - Docker, for local Redis
 - External PostgreSQL database URL from Neon, Supabase, Railway, local Postgres, or another provider
 - Redis, via `docker compose up -d redis` locally
-- Google OAuth app credentials
 - GitHub OAuth app credentials
-- OpenAI or Groq API key entered in the browser at analysis time
+- OpenAI API key entered in the browser at analysis time
 
-Provider keys are encrypted for the lifetime of a queued job and cleared when the job reaches a terminal state. Raw provider keys are not stored in `.env`, logs, or report payloads.
+OpenAI keys are encrypted for the lifetime of a queued job and cleared when the job reaches a terminal state. Raw OpenAI keys are not stored in `.env`, logs, or report payloads.
 
 OAuth callback URLs for local development:
 
 ```txt
 http://localhost:3000/api/auth/callback/github
-http://localhost:3000/api/auth/callback/google
 ```
 
 ## Local Setup
@@ -82,18 +80,15 @@ ANALYSIS_JOB_BACKOFF_MS="15000"
 ANALYSIS_JOB_TIMEOUT_MS="900000"
 ANALYSIS_QUEUE_CONCURRENCY="1"
 
-# OAuth login providers
+# OAuth login provider
 GITHUB_CLIENT_ID=""
 GITHUB_CLIENT_SECRET=""
-GOOGLE_CLIENT_ID=""
-GOOGLE_CLIENT_SECRET=""
 
 # Optional, recommended for higher GitHub rate limits
 GITHUB_TOKEN=""
 
 # Optional model overrides
 OPENAI_MODEL="gpt-4o-mini"
-GROQ_MODEL="llama-3.1-8b-instant"
 ```
 
 Generate Prisma client and apply the database schema:
@@ -103,12 +98,11 @@ pnpm prisma generate
 pnpm prisma migrate dev
 ```
 
-Start Redis, the app, and the analysis worker:
+Start Redis, then start the app and analysis worker together:
 
 ```bash
 pnpm redis:up
 pnpm dev
-pnpm dev:worker
 ```
 
 Open:
@@ -121,6 +115,7 @@ http://localhost:3000
 
 ```bash
 pnpm dev
+pnpm dev:web
 pnpm dev:worker
 pnpm redis:up
 pnpm build
@@ -136,15 +131,14 @@ pnpm prisma generate
 ## Demo Flow
 
 1. Go to `/login`.
-2. Sign in with Google or GitHub.
+2. Sign in with GitHub.
 3. Go to `/analyze`.
-4. Select `OpenAI` or `Groq`.
-5. Paste a provider API key.
-6. Enter a public repo, for example `owner/repo` or `https://github.com/owner/repo`.
-7. Click **Analyze Repository**.
-8. The request creates a queued analysis job and the page streams persisted progress.
-9. After analysis completes, the app redirects to `/reports/[reportId]`.
-10. Go to `/dashboard` to access saved reports for the signed-in user.
+4. Paste an OpenAI API key.
+5. Enter a public repo, for example `owner/repo` or `https://github.com/owner/repo`.
+6. Click **Analyze Repository**.
+7. The request creates a queued analysis job and the page streams persisted progress.
+8. After analysis completes, the app redirects to `/reports/[reportId]`.
+9. Go to `/dashboard` to access saved reports for the signed-in user.
 
 Use a small public repo for the MVP. The analysis route is synchronous and intended for bounded demos.
 
@@ -152,7 +146,7 @@ Use a small public repo for the MVP. The analysis route is synchronous and inten
 
 ```txt
 Login
-  -> NextAuth Google/GitHub OAuth
+  -> NextAuth GitHub OAuth
   -> JWT session + Prisma user/account storage
   -> middleware-protected app/API routes
   -> Dashboard
@@ -161,7 +155,7 @@ Analyze form
   -> authenticated user lookup
   -> Zod validation
   -> user-owned Prisma report record: pending
-  -> Prisma AnalysisJob record with encrypted job-scoped provider credential
+  -> Prisma AnalysisJob record with encrypted job-scoped OpenAI credential
   -> BullMQ Redis queue
   -> SSE progress subscription
 Analysis worker
@@ -170,7 +164,7 @@ Analysis worker
   -> file candidate selection
   -> bounded raw content fetch
   -> persisted step-level progress and timestamps
-  -> AIProvider adapter: OpenAI or Groq
+  -> OpenAI AIProvider adapter
   -> AgentPipeline
        FileClassifierAgent
        ArchitectureAgent
@@ -183,12 +177,10 @@ Analysis worker
   -> /reports/[reportId]
 ```
 
-Provider-specific SDK usage is isolated to:
+OpenAI SDK usage is isolated to:
 
 ```txt
 src/lib/ai/providers/OpenAIProvider.ts
-src/lib/ai/providers/GroqProvider.ts
-src/lib/ai/providers/ProviderFactory.ts
 ```
 
 Agents depend only on:
@@ -197,11 +189,10 @@ Agents depend only on:
 src/lib/ai/providers/AIProvider.ts
 ```
 
-Adding Anthropic later should require only:
+Adding another model provider later should require deliberate reintroduction of:
 
 - new provider adapter
-- `ProviderFactory.ts`
-- `AIProviderName`
+- provider selection in the request schema
 - provider selector UI
 
 ## Cost and Safety Limits
@@ -230,7 +221,6 @@ Request:
 
 ```json
 {
-  "provider": "openai",
   "apiKey": "sk-...",
   "repoUrl": "owner/repo"
 }
@@ -295,7 +285,7 @@ Important fields:
 - `AnalysisReport.selectedFilesJson`
 - `AnalysisReport.userId`: owner of the saved report
 
-Raw provider keys are never persisted.
+Raw OpenAI keys are never persisted.
 
 ## Tests
 
@@ -310,7 +300,6 @@ Covered:
 - `parseGithubUrl`
 - `selectImportantFiles`
 - `redactApiKey`
-- provider factory
 - analyze schema validation
 
 ## Troubleshooting
@@ -328,10 +317,10 @@ If GitHub rate limits requests:
 - restart `pnpm dev`
 - use a smaller repository
 
-If provider calls fail:
+If OpenAI calls fail:
 
-- confirm the selected provider matches the pasted key
-- confirm billing/rate limits on the provider account
+- confirm the pasted key is an OpenAI key
+- confirm billing/rate limits on the OpenAI account
 - try a smaller public repository
 
 If `pnpm build` fails because the database is unavailable:
@@ -343,7 +332,7 @@ If `pnpm build` fails because the database is unavailable:
 
 - Jobs are queued in Redis through BullMQ.
 - Retries use exponential backoff from `ANALYSIS_JOB_ATTEMPTS` and `ANALYSIS_JOB_BACKOFF_MS`.
-- Timeouts are enforced with `ANALYSIS_JOB_TIMEOUT_MS` and abort signals passed into GitHub/provider calls.
+- Timeouts are enforced with `ANALYSIS_JOB_TIMEOUT_MS` and abort signals passed into GitHub/OpenAI calls.
 - Final non-cancelled failures are copied to the `analysis.dead` dead-letter queue and kept failed in BullMQ.
 - Report transitions are guarded so completed reports are not overwritten by later failure paths.
 
@@ -356,9 +345,9 @@ For Vercel:
 3. Add `NEXTAUTH_URL` using the deployed app URL.
 4. Add `NEXTAUTH_SECRET`.
 5. Add `ANALYSIS_JOB_SECRET`.
-6. Add Google and GitHub OAuth credentials.
+6. Add GitHub OAuth credentials.
 7. Add optional `GITHUB_TOKEN`.
-8. Do not add user OpenAI/Groq keys as env vars for MVP.
+8. Do not add user OpenAI keys as env vars for MVP.
 9. Run Prisma migration against the production database before demoing.
 10. Run at least one long-lived `pnpm worker` process beside the Next.js app.
 

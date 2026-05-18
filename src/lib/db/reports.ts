@@ -10,14 +10,12 @@ import { AnalysisFailedError } from "@/lib/utils/errors";
 
 export async function createReport(input: {
   repositoryId: string;
-  provider: string;
   userId: string;
 }) {
   return prisma.analysisReport.create({
     data: {
       repositoryId: input.repositoryId,
       userId: input.userId,
-      provider: input.provider,
       status: "pending",
     },
   });
@@ -124,7 +122,6 @@ export async function failReport(reportId: string, errorMessage: string) {
 export type ReportView = {
   id: string;
   userId: string | null;
-  provider: string;
   status: string;
   summary: string | null;
   scorecard: Scorecard | null;
@@ -178,7 +175,6 @@ export async function getReportById(reportId: string, userId: string): Promise<R
   return {
     id: report.id,
     userId: report.userId,
-    provider: report.provider,
     status: report.status,
     summary: report.summary,
     scorecard: report.scorecardJson as Scorecard | null,
@@ -212,7 +208,6 @@ export async function getReportById(reportId: string, userId: string): Promise<R
 
 export type ReportSummary = {
   id: string;
-  provider: string;
   status: string;
   summary: string | null;
   overallScore: number | null;
@@ -241,7 +236,6 @@ export async function getReportsForUser(userId: string): Promise<ReportSummary[]
 
   return reports.map((report) => ({
     id: report.id,
-    provider: report.provider,
     status: report.status,
     summary: report.summary,
     overallScore:

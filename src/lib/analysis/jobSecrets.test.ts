@@ -11,13 +11,13 @@ afterEach(() => {
 });
 
 describe("analysis job secrets", () => {
-  it("round-trips encrypted provider credentials", () => {
+  it("round-trips encrypted OpenAI credentials", () => {
     process.env.ANALYSIS_JOB_SECRET = "test-analysis-job-secret-with-32-characters";
 
-    const encrypted = encryptAnalysisSecret("provider-key");
+    const encrypted = encryptAnalysisSecret("openai-key");
 
-    expect(encrypted).not.toContain("provider-key");
-    expect(decryptAnalysisSecret(encrypted)).toBe("provider-key");
+    expect(encrypted).not.toContain("openai-key");
+    expect(decryptAnalysisSecret(encrypted)).toBe("openai-key");
   });
 
   it("rejects malformed encrypted payloads", () => {

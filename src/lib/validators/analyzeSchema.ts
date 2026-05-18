@@ -2,8 +2,7 @@ import { z } from "zod";
 import { parseGithubUrl } from "@/lib/github/parseGithubUrl";
 
 export const analyzeSchema = z.object({
-  provider: z.enum(["openai", "groq"]),
-  apiKey: z.string().min(1, "Provider API key is required."),
+  apiKey: z.string().min(1, "OpenAI API key is required."),
   analysisDepth: z.enum(["standard", "expanded"]).default("standard"),
   repoUrl: z
     .string()

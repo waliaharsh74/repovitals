@@ -3,6 +3,7 @@
 import { AlertCircle, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import {
   ANALYSIS_WORKFLOW_STEPS,
+  type AnalysisProgressRecord,
   type AnalysisProgressStatus,
   type AnalysisWorkflowStepId,
 } from "@/lib/analysis/progress";
@@ -26,6 +27,29 @@ export function createInitialWorkflowSteps(): AnalysisWorkflowStepState[] {
     ...step,
     status: "pending",
   }));
+}
+
+export function mergeWorkflowProgressRecords(
+  currentSteps: AnalysisWorkflowStepState[],
+  progress: AnalysisProgressRecord[],
+): AnalysisWorkflowStepState[] {
+  return currentSteps.map((step) => {
+    const persisted = progress.find((item) => item.step === step.id);
+    if (!persisted) {
+      return step;
+    }
+
+    return {
+      ...step,
+      status: persisted.status,
+      message: persisted.message,
+      detail: persisted.detail ?? undefined,
+      startedAt: persisted.startedAt ?? undefined,
+      completedAt: persisted.completedAt ?? undefined,
+      failedAt: persisted.failedAt ?? undefined,
+      updatedAt: persisted.updatedAt,
+    };
+  });
 }
 
 export function AnalysisWorkflow({

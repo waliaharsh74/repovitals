@@ -10,7 +10,6 @@ export function ReportHeader({ report }: { report: ReportView }) {
         <Badge variant={report.status === "completed" ? "low" : report.status === "failed" ? "critical" : "default"}>
           {report.status}
         </Badge>
-        <Badge variant="outline">{report.provider}</Badge>
         <span className="text-sm text-muted-foreground">
           Created {new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(report.createdAt)}
         </span>

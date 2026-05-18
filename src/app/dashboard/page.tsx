@@ -79,7 +79,6 @@ export default async function DashboardPage() {
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={statusVariant(report.status)}>{report.status}</Badge>
-                    <Badge variant="outline">{report.provider}</Badge>
                     {report.overallScore !== null ? (
                       <Badge variant="outline">Overall {report.overallScore}</Badge>
                     ) : null}

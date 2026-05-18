@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "tsx scripts/dev.ts",
+    "dev:web": "next dev",
     "dev:worker": "tsx src/workers/analysisWorker.ts",
     "redis:up": "docker compose up -d redis",
     "build": "next build",
@@ -25,7 +26,6 @@
     "bullmq": "^5.76.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "groq-sdk": "^0.9.1",
     "lucide-react": "^0.468.0",
     "mermaid": "^11.4.1",
     "next": "^15.1.4",

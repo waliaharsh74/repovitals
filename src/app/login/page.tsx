@@ -68,13 +68,13 @@ export default async function LoginPage({
           {hasAuthError ? (
             <Alert className="flex gap-2 border-red-200 bg-red-50 text-red-800">
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
-              <span>Authentication failed. Check the OAuth provider configuration and try again.</span>
+              <span>Authentication failed. Check the GitHub OAuth configuration and try again.</span>
             </Alert>
           ) : null}
           <LoginButtons callbackUrl={callbackUrl} />
           <div className="flex gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-            <p>Provider API keys are still used only for a single analysis run and are never stored.</p>
+            <p>OpenAI API keys are still used only for a single analysis run and are never stored.</p>
           </div>
         </CardContent>
       </Card>

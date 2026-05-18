@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAnalysisJobSnapshot } from "@/lib/db/analysisJobs";
 import type { AnalysisProgressEvent } from "@/lib/analysis/progress";
+import { getAnalysisQueue } from "@/lib/analysis/jobQueue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,23 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 function encodeSse(event: string, data: AnalysisProgressEvent): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+async function getPendingSnapshotMessage(errorMessage?: string | null) {
+  if (errorMessage) {
+    return errorMessage;
+  }
+
+  try {
+    const workerCount = await getAnalysisQueue().getWorkersCount();
+    if (workerCount === 0) {
+      return "Analysis queued, but no analysis worker is currently connected.";
+    }
+  } catch {
+    return undefined;
+  }
+
+  return "Analysis queued. Waiting for the worker...";
 }
 
 export async function GET(
@@ -45,20 +63,72 @@ export async function GET(
   const encoder = new TextEncoder();
   let lastProgressFingerprint = "";
   let lastStatus = "";
+  let closeCurrentStream: (() => void) | undefined;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let closed = false;
+      let pollTimer: ReturnType<typeof setTimeout> | undefined;
+      closeCurrentStream = closeStream;
+
+      function clearPollTimer() {
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = undefined;
+        }
+      }
+
+      function markClosed() {
+        closed = true;
+        clearPollTimer();
+        request.signal.removeEventListener("abort", closeStream);
+      }
+
+      function closeStream() {
+        if (closed) {
+          return;
+        }
+
+        markClosed();
+        try {
+          controller.close();
+        } catch {
+          // The runtime may already have closed the controller after a client disconnect.
+        }
+      }
 
       function send(event: string, data: AnalysisProgressEvent) {
-        controller.enqueue(encoder.encode(encodeSse(event, data)));
+        if (closed || request.signal.aborted) {
+          closeStream();
+          return false;
+        }
+
+        try {
+          controller.enqueue(encoder.encode(encodeSse(event, data)));
+          return true;
+        } catch {
+          markClosed();
+          return false;
+        }
+      }
+
+      function scheduleTick(delayMs: number) {
+        if (closed || request.signal.aborted) {
+          closeStream();
+          return;
+        }
+
+        clearPollTimer();
+        pollTimer = setTimeout(() => {
+          pollTimer = undefined;
+          void tick();
+        }, delayMs);
       }
 
       async function tick() {
         try {
           if (closed || request.signal.aborted) {
-            closed = true;
-            controller.close();
+            closeStream();
             return;
           }
 
@@ -70,8 +140,7 @@ export async function GET(
               code: "NOT_FOUND",
               message: "Analysis job not found.",
             });
-            closed = true;
-            controller.close();
+            closeStream();
             return;
           }
 
@@ -85,7 +154,10 @@ export async function GET(
               reportId: snapshot.reportId,
               status: snapshot.status,
               steps: snapshot.progress,
-              message: snapshot.errorMessage ?? undefined,
+              message:
+                snapshot.status === "pending"
+                  ? await getPendingSnapshotMessage(snapshot.errorMessage)
+                  : snapshot.errorMessage ?? undefined,
             });
           }
 
@@ -96,8 +168,7 @@ export async function GET(
               reportId: snapshot.reportId,
               message: "Report created. Opening results.",
             });
-            closed = true;
-            controller.close();
+            closeStream();
             return;
           }
 
@@ -111,14 +182,11 @@ export async function GET(
                 snapshot.errorMessage ??
                 (snapshot.status === "cancelled" ? "Analysis was cancelled." : "Analysis failed."),
             });
-            closed = true;
-            controller.close();
+            closeStream();
             return;
           }
 
-          setTimeout(() => {
-            void tick();
-          }, POLL_MS);
+          scheduleTick(POLL_MS);
         } catch (error) {
           send("job-error", {
             type: "error",
@@ -126,32 +194,39 @@ export async function GET(
             code: "ANALYSIS_FAILED",
             message: error instanceof Error ? error.message : "Could not stream analysis progress.",
           });
-          closed = true;
-          controller.close();
+          closeStream();
         }
       }
 
-      send("snapshot", {
+      request.signal.addEventListener("abort", closeStream, { once: true });
+
+      const initialMessage =
+        initialSnapshot.status === "pending"
+          ? await getPendingSnapshotMessage(initialSnapshot.errorMessage)
+          : initialSnapshot.errorMessage ?? undefined;
+
+      if (!send("snapshot", {
         type: "snapshot",
         jobId: initialSnapshot.jobId,
         reportId: initialSnapshot.reportId,
         status: initialSnapshot.status,
         steps: initialSnapshot.progress,
-        message: initialSnapshot.errorMessage ?? undefined,
-      });
+        message: initialMessage,
+      })) {
+        return;
+      }
       lastProgressFingerprint = JSON.stringify(initialSnapshot.progress);
       lastStatus = initialSnapshot.status;
 
       if (TERMINAL_STATUSES.has(initialSnapshot.status)) {
-        setTimeout(() => {
-          void tick();
-        }, 0);
+        scheduleTick(0);
         return;
       }
 
-      setTimeout(() => {
-        void tick();
-      }, POLL_MS);
+      scheduleTick(POLL_MS);
+    },
+    cancel() {
+      closeCurrentStream?.();
     },
   });
 

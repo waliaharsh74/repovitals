@@ -101,8 +101,7 @@ model AnalysisReport {
   userId       String?
   user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  provider String
-  status   String
+  status String
 
   summary             String?
   scorecardJson       Json?
@@ -131,7 +130,6 @@ model AnalysisJob {
 
   queueJobId    String? @unique
   repoUrl       String
-  provider      String
   analysisDepth String
 
   encryptedApiKey String? @db.Text

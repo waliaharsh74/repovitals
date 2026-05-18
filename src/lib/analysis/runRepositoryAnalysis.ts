@@ -1,11 +1,11 @@
-import { createAIProvider } from "@/lib/ai/providers/ProviderFactory";
+import { OpenAIProvider } from "@/lib/ai/providers/OpenAIProvider";
 import {
   getRepoAnalysisLimits,
   type AnalysisDepth,
   type RepoAnalysisLimits,
 } from "@/lib/ai/tokenBudget";
 import type { EmitAnalysisProgress } from "@/lib/analysis/progress";
-import type { AIProviderName, RepoContext, SelectedRepoFile } from "@/lib/agents/types";
+import type { RepoContext, SelectedRepoFile } from "@/lib/agents/types";
 import { runAgentPipeline } from "@/lib/agents/AgentPipeline";
 import { parseGithubUrl } from "@/lib/github/parseGithubUrl";
 import { fetchFileContent } from "@/lib/github/fetchFileContent";
@@ -164,17 +164,12 @@ export async function prepareRepositoryAnalysis(input: {
 }
 
 export async function runPreparedRepositoryAnalysis(input: {
-  provider: AIProviderName;
   apiKey: string;
   prepared: PreparedRepositoryAnalysis;
   onProgress?: EmitAnalysisProgress;
   signal?: AbortSignal;
 }): Promise<RepositoryAnalysisResult> {
-  const provider = createAIProvider({
-    provider: input.provider,
-    apiKey: input.apiKey,
-    signal: input.signal,
-  });
+  const provider = new OpenAIProvider({ apiKey: input.apiKey, signal: input.signal });
 
   const report = await runAgentPipeline({
     provider,
@@ -192,7 +187,6 @@ export async function runPreparedRepositoryAnalysis(input: {
 }
 
 export async function runRepositoryAnalysis(input: {
-  provider: AIProviderName;
   apiKey: string;
   repoUrl: string;
   analysisDepth?: AnalysisDepth;
@@ -206,7 +200,6 @@ export async function runRepositoryAnalysis(input: {
     signal: input.signal,
   });
   return runPreparedRepositoryAnalysis({
-    provider: input.provider,
     apiKey: input.apiKey,
     prepared,
     onProgress: input.onProgress,
