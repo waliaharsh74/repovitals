@@ -8,10 +8,12 @@ import {
   Gauge,
   Github,
   Network,
+  Search,
   SearchCode,
   ShieldAlert,
   SlidersHorizontal,
   TestTube2,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
@@ -73,6 +75,7 @@ export function AnalyzeRepoForm() {
   const [connectGithubPrompt, setConnectGithubPrompt] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [repoOptions, setRepoOptions] = useState<GithubRepoOption[]>([]);
+  const [repoSearchQuery, setRepoSearchQuery] = useState("");
   const [reposLoading, setReposLoading] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("full");
   const [workflowSteps, setWorkflowSteps] = useState<AnalysisWorkflowStepState[]>(
@@ -94,6 +97,17 @@ export function AnalyzeRepoForm() {
     const repoUrl = form.getValues("repoUrl");
     return `/api/github/install?repoUrl=${encodeURIComponent(repoUrl)}`;
   }, [form]);
+
+  const filteredRepoOptions = useMemo(() => {
+    const query = repoSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return repoOptions;
+    }
+
+    return repoOptions.filter((repo) =>
+      [repo.fullName, repo.url].some((value) => value.toLowerCase().includes(query)),
+    );
+  }, [repoOptions, repoSearchQuery]);
 
   const isSubmitting = form.formState.isSubmitting;
   const isAnalysisActive = analysisState === "queued" || analysisState === "running";
@@ -473,19 +487,57 @@ export function AnalyzeRepoForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="repoPicker">Your GitHub repositories</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="repoSearch">Your GitHub repositories</Label>
+              {repoOptions.length ? (
+                <span className="text-xs font-medium text-muted-foreground">
+                  {filteredRepoOptions.length} of {repoOptions.length}
+                </span>
+              ) : null}
+            </div>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="repoSearch"
+                type="search"
+                placeholder="Search repositories by name"
+                className="pl-9 pr-9"
+                value={repoSearchQuery}
+                disabled={isFormDisabled || reposLoading || repoOptions.length === 0}
+                onChange={(event) => setRepoSearchQuery(event.target.value)}
+              />
+              {repoSearchQuery ? (
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                  disabled={isFormDisabled}
+                  aria-label="Clear repository search"
+                  onClick={() => setRepoSearchQuery("")}
+                >
+                  <X className="size-4" />
+                </button>
+              ) : null}
+            </div>
             <select
               id="repoPicker"
               className="w-full rounded-md border bg-background p-2 text-sm"
-              disabled={isFormDisabled || reposLoading || repoOptions.length === 0}
+              disabled={isFormDisabled || reposLoading || filteredRepoOptions.length === 0}
               onChange={(event) => {
                 if (event.target.value) {
                   form.setValue("repoUrl", event.target.value, { shouldValidate: true });
                 }
               }}
             >
-              <option value="">{reposLoading ? "Loading repositories..." : "Select a repository (optional)"}</option>
-              {repoOptions.map((repo) => (
+              <option value="">
+                {reposLoading
+                  ? "Loading repositories..."
+                  : repoOptions.length === 0
+                    ? "No repositories available"
+                    : filteredRepoOptions.length === 0
+                      ? "No repositories match this search"
+                      : "Select a repository (optional)"}
+              </option>
+              {filteredRepoOptions.map((repo) => (
                 <option key={repo.id} value={repo.url}>
                   {repo.fullName}{repo.private ? " (private)" : ""}
                 </option>

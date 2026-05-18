@@ -19,7 +19,7 @@ import {
   selectImportantFileCandidates,
   toSelectedFileMetadata,
 } from "@/lib/github/selectImportantFiles";
-import { AnalysisFailedError } from "@/lib/utils/errors";
+import { AnalysisFailedError, AppError } from "@/lib/utils/errors";
 
 export type RepositoryAnalysisResult = {
   repository: {
@@ -43,6 +43,7 @@ export type PreparedRepositoryAnalysis = {
 export async function prepareRepositoryAnalysis(input: {
   repoUrl: string;
   analysisDepth?: AnalysisDepth;
+  githubAccessToken?: string;
   limits?: RepoAnalysisLimits;
   onProgress?: EmitAnalysisProgress;
   signal?: AbortSignal;
@@ -57,7 +58,10 @@ export async function prepareRepositoryAnalysis(input: {
   });
 
   const parsed = parseGithubUrl(input.repoUrl);
-  const repoTree = await fetchRepoTree(parsed.owner, parsed.repo, { signal: input.signal });
+  const repoTree = await fetchRepoTree(parsed.owner, parsed.repo, {
+    token: input.githubAccessToken,
+    signal: input.signal,
+  });
   const blobCount = repoTree.tree.filter((item) => item.type === "blob").length;
 
   await emit?.({
@@ -90,7 +94,7 @@ export async function prepareRepositoryAnalysis(input: {
   await emit?.({
     step: "fetch-files",
     status: "running",
-    message: "Downloading selected public source files.",
+    message: "Downloading selected source files.",
   });
 
   const fetchedFiles = await Promise.all(
@@ -101,6 +105,8 @@ export async function prepareRepositoryAnalysis(input: {
           repo: repoTree.repo,
           branch: repoTree.defaultBranch,
           path: file.path,
+          sha: file.sha,
+          token: input.githubAccessToken,
           signal: input.signal,
         });
 
@@ -116,7 +122,17 @@ export async function prepareRepositoryAnalysis(input: {
           sha: file.sha,
           content,
         };
-      } catch {
+      } catch (error) {
+        if (
+          input.githubAccessToken ||
+          (error instanceof AppError &&
+            (error.code === "GITHUB_ACCESS_DENIED" ||
+              error.code === "GITHUB_RATE_LIMIT" ||
+              error.code === "GITHUB_APP_INSTALLATION_REQUIRED"))
+        ) {
+          throw error;
+        }
+
         return null;
       }
     }),
@@ -128,7 +144,7 @@ export async function prepareRepositoryAnalysis(input: {
   );
 
   if (files.length === 0) {
-    throw new AnalysisFailedError("RepoVitals selected files but could not fetch their public contents.");
+    throw new AnalysisFailedError("RepoVitals selected files but could not fetch their contents.");
   }
 
   const totalSelectedChars = files.reduce((sum, file) => sum + file.content.length, 0);
@@ -196,6 +212,7 @@ export async function runRepositoryAnalysis(input: {
   apiKey: string;
   repoUrl: string;
   analysisDepth?: AnalysisDepth;
+  githubAccessToken?: string;
   selectedAgentIds?: AnalysisAgentId[];
   onProgress?: EmitAnalysisProgress;
   signal?: AbortSignal;
@@ -203,6 +220,7 @@ export async function runRepositoryAnalysis(input: {
   const prepared = await prepareRepositoryAnalysis({
     repoUrl: input.repoUrl,
     analysisDepth: input.analysisDepth,
+    githubAccessToken: input.githubAccessToken,
     onProgress: input.onProgress,
     signal: input.signal,
   });

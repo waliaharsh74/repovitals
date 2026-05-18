@@ -73,6 +73,10 @@ export async function githubFetch<T>(path: string, options: RequestOptions = {})
     signal: options.signal,
   });
 
+  if (response.status === 401) {
+    throw new GithubAccessDeniedError("GitHub authorization expired or is no longer valid.");
+  }
+
   if (response.status === 404 || response.status === 403) {
     mapGithubPermissionError(response, options.auth);
   }

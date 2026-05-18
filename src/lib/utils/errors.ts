@@ -7,6 +7,10 @@ export type ErrorCode =
   | "GITHUB_RATE_LIMIT"
   | "GITHUB_ACCESS_DENIED"
   | "GITHUB_APP_INSTALLATION_REQUIRED"
+  | "GITHUB_OAUTH_REQUIRED"
+  | "GITHUB_REAUTH_REQUIRED"
+  | "GITHUB_OAUTH_NOT_CONFIGURED"
+  | "GITHUB_TOKEN_REFRESH_FAILED"
   | "PROVIDER_AUTHENTICATION"
   | "PROVIDER_RATE_LIMIT"
   | "REPO_TOO_LARGE"
@@ -27,7 +31,7 @@ export class AppError extends Error {
   }
 }
 export class InvalidGithubUrlError extends AppError { constructor(message = "Enter a valid GitHub repository URL or owner/repo path.") { super("INVALID_GITHUB_URL", message, 400);} }
-export class GithubRepoNotFoundError extends AppError { constructor(message = "GitHub repository was not found or is not public.") { super("GITHUB_REPO_NOT_FOUND", message, 404);} }
+export class GithubRepoNotFoundError extends AppError { constructor(message = "GitHub repository was not found or is not accessible with the current GitHub authorization.") { super("GITHUB_REPO_NOT_FOUND", message, 404);} }
 export class GithubRateLimitError extends AppError { constructor(message = "GitHub rate limit reached while fetching this repository. Add GITHUB_TOKEN or try later.") { super("GITHUB_RATE_LIMIT", message, 429);} }
 export class GithubAccessDeniedError extends AppError { constructor(message = "GitHub denied access to this repository.") { super("GITHUB_ACCESS_DENIED", message, 403);} }
 export class GithubInstallationRequiredError extends AppError { constructor(message = "This private repository is not installed for your GitHub App installation.") { super("GITHUB_APP_INSTALLATION_REQUIRED", message, 404);} }

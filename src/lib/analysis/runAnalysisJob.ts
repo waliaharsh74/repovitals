@@ -19,7 +19,9 @@ import {
 import { upsertRepository } from "@/lib/db/repositories";
 import { completeReport, updateReportRepository } from "@/lib/db/reports";
 import { redactApiKey } from "@/lib/ai/redact";
+import { getGithubUserAccessToken } from "@/lib/github/oauth";
 import {
+  AppError,
   AnalysisCancelledError,
   AnalysisFailedError,
   AnalysisTimeoutError,
@@ -58,6 +60,19 @@ async function addDeadLetter(input: {
   });
 }
 
+async function getGithubTokenForAnalysis(userId: string | null) {
+  if (!userId) {
+    return undefined;
+  }
+
+  const token = await getGithubUserAccessToken(userId);
+  if (token.ok) {
+    return token.token;
+  }
+
+  throw new AppError(token.code, token.message, token.status);
+}
+
 export async function runAnalysisQueueJob(job: Job<AnalysisQueueJobData>) {
   const startedAt = Date.now();
   const attempt = job.attemptsMade + 1;
@@ -92,10 +107,12 @@ export async function runAnalysisQueueJob(job: Job<AnalysisQueueJobData>) {
 
   try {
     await heartbeatAnalysisJob(analysisJob.id);
+    const githubAccessToken = await getGithubTokenForAnalysis(analysisJob.userId);
 
     const prepared = await prepareRepositoryAnalysis({
       repoUrl: analysisJob.repoUrl,
       analysisDepth: analysisJob.analysisDepth,
+      githubAccessToken,
       onProgress: emitProgress,
       signal: abortController.signal,
     });

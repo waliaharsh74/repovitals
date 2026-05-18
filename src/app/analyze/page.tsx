@@ -7,14 +7,14 @@ export default function AnalyzePage() {
       <section className="space-y-6">
         <div className="inline-flex items-center gap-2 rounded-md border bg-muted px-3 py-1 text-sm text-muted-foreground">
           <ShieldCheck className="size-4 text-primary" />
-          Public repositories only for MVP
+          Public and authorized private repositories
         </div>
         <div className="max-w-3xl space-y-4">
           <h1 className="text-4xl font-semibold tracking-normal md:text-5xl">
             Run a senior-engineering readiness review.
           </h1>
           <p className="text-lg leading-8 text-muted-foreground">
-            RepoVitals fetches a bounded set of important files, runs specialized agents, and persists a
+            RepoVitals fetches a bounded set of accessible files, runs specialized agents, and persists a
             report with scorecards, findings, recommendations, and an architecture diagram.
           </p>
         </div>
