@@ -1,366 +1,179 @@
 # RepoVitals
 
-**RepoVitals** is an agentic GitHub repository review platform.
+RepoVitals is a GitHub repository review application. A signed-in user selects a repository, chooses a review scope, supplies an OpenAI API key for that analysis run, and views a saved production-readiness report covering architecture, security, performance, maintainability, and testing.
 
-Sign in with GitHub, paste a public GitHub repository, enter an OpenAI API key for the current run, and get a persisted production-readiness report covering architecture, security, performance, maintainability, and testability.
+## Application Flow
 
-Tagline:
+### 1. Start a Repository Review
 
-```txt
-Paste a GitHub repo. Get a senior-engineering production-readiness review.
-```
+The landing page introduces the production-readiness review and the report categories: architecture, security, performance, maintainability, and testing.
 
-## Current MVP
+![RepoVitals landing page with report preview](design/readme/landing.png)
 
-Implemented:
+### 2. Sign In with GitHub
 
-- Next.js App Router + TypeScript + Tailwind
-- shadcn-style UI primitives
-- GitHub OAuth login through NextAuth
-- authenticated dashboard for saved reports
-- React Hook Form + Zod analyze form
-- Prisma + PostgreSQL persistence
-- public GitHub repository URL parsing
-- GitHub metadata, tree, and raw file ingestion
-- bounded smart file selection
-- OpenAI structured-output adapter behind `AIProvider`
-- deterministic file classifier
-- architecture, security, performance, testing, and synthesis agents
-- Redis-backed asynchronous analysis jobs
-- SSE progress streaming for queued analysis runs
-- `/api/analyze`, `/api/analyze/jobs/[jobId]/events`, `/api/analyze/jobs/[jobId]/cancel`, and `/api/reports/[reportId]`
-- user-owned persisted report page with scorecards, findings, Mermaid diagram, recommendations, selected files, and agent trace
-- Vitest coverage for core pure functions
+GitHub authentication connects analyses to an account so completed reports remain available from the dashboard.
 
-Not included in MVP:
+![GitHub sign-in screen for RepoVitals](design/readme/login.png)
 
-- private repositories
-- saved OpenAI keys
-- payments
-- WebSockets
-- GitHub issue or PR creation
+### 3. Follow Analysis Progress
+
+After the user selects a repository, review scope, and API key, RepoVitals queues the run and displays its step-by-step progress. The running view shows selected agents, completed workflow stages, and a cancellation action.
+
+![Queued analysis workflow progress with completed stages](design/progress.png)
+
+### 4. Inspect the Production-Readiness Report
+
+The completed report turns repository structure into an architecture diagram and groups findings by review area. Findings include severity, confidence, source location, explanation, and a recommended fix.
+
+![Generated repository architecture diagram](design/architecture.png)
+
+![Security finding with severity, confidence, file location, and remediation](design/security.png)
+
+## Main Features
+
+| Feature | Capability |
+| --- | --- |
+| GitHub sign-in and protected routes | NextAuth GitHub OAuth gates analysis, dashboards, reports, and related APIs |
+| Saved report dashboard | Signed-in users can return to persisted reports |
+| Repository analysis workspace | Select a repository and configure full or custom agent coverage |
+| Queued processing and progress | BullMQ and Redis execute analysis jobs while SSE streams persisted progress |
+| Production-readiness report | Scorecards, summary, architecture diagram, findings, recommendations, and agent trace |
+| Credential handling | The submitted OpenAI API key is encrypted while required by a queued job and cleared at a terminal state |
+
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Web application | Next.js 15 App Router, React 19, TypeScript |
+| Styling and UI | Tailwind CSS, Radix primitives, Lucide icons |
+| Authentication | NextAuth 4 with GitHub OAuth and Prisma adapter |
+| Forms and validation | React Hook Form, Zod |
+| Data persistence | Prisma with PostgreSQL |
+| Job processing | BullMQ with Redis and a separate TypeScript worker |
+| AI integration | OpenAI provider adapter and specialized analysis agents |
+| Report diagrams | Mermaid |
+| Tests and linting | Vitest and ESLint |
 
 ## Requirements
 
-- Node.js 22+
-- pnpm 9+
-- Docker, for local Redis
-- External PostgreSQL database URL from Neon, Supabase, Railway, local Postgres, or another provider
-- Redis, via `docker compose up -d redis` locally
-- GitHub OAuth app credentials
-- OpenAI API key entered in the browser at analysis time
-
-OpenAI keys are encrypted for the lifetime of a queued job and cleared when the job reaches a terminal state. Raw OpenAI keys are not stored in `.env`, logs, or report payloads.
-
-OAuth callback URLs for local development:
-
-```txt
-http://localhost:3000/api/auth/callback/github
-```
+- Node.js compatible with Next.js 15. This repository does not pin a Node version.
+- `pnpm` 9.15.3, as declared in `package.json`.
+- PostgreSQL available through `DATABASE_URL`.
+- Redis; the repository includes a Docker Compose Redis service.
+- GitHub OAuth application credentials.
+- An OpenAI API key entered in the analysis UI when starting a review.
 
 ## Local Setup
 
-Install dependencies:
-
-```bash
-pnpm install
-```
-
-Create `.env.local`:
-
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
-REDIS_URL="redis://localhost:6379"
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="generate-a-random-secret"
-ANALYSIS_JOB_SECRET="generate-a-random-32-byte-analysis-job-secret"
-ANALYSIS_JOB_ATTEMPTS="3"
-ANALYSIS_JOB_BACKOFF_MS="15000"
-ANALYSIS_JOB_TIMEOUT_MS="900000"
-ANALYSIS_QUEUE_CONCURRENCY="1"
-
-# OAuth login provider
-GITHUB_CLIENT_ID=""
-GITHUB_CLIENT_SECRET=""
-
-# Optional, recommended for higher GitHub rate limits
-GITHUB_TOKEN=""
-
-# Optional model overrides
-OPENAI_MODEL="gpt-4o-mini"
-```
-
-Generate Prisma client and apply the database schema:
-
-```bash
-pnpm prisma generate
-pnpm prisma migrate dev
-```
-
-Start Redis, then start the app and analysis worker together:
-
-```bash
-pnpm redis:up
-pnpm dev
-```
-
-Open:
-
-```txt
-http://localhost:3000
-```
-
-## Core Commands
-
-```bash
-pnpm dev
-pnpm dev:web
-pnpm dev:worker
-pnpm redis:up
-pnpm build
-pnpm start
-pnpm worker
-pnpm lint
-pnpm test
-pnpm prisma studio
-pnpm prisma migrate dev
-pnpm prisma generate
-```
-
-## Demo Flow
-
-1. Go to `/login`.
-2. Sign in with GitHub.
-3. Go to `/analyze`.
-4. Paste an OpenAI API key.
-5. Enter a public repo, for example `owner/repo` or `https://github.com/owner/repo`.
-6. Click **Analyze Repository**.
-7. The request creates a queued analysis job and the page streams persisted progress.
-8. After analysis completes, the app redirects to `/reports/[reportId]`.
-9. Go to `/dashboard` to access saved reports for the signed-in user.
-
-Use a small public repo for the MVP. The analysis route is synchronous and intended for bounded demos.
-
-## Architecture
-
-```txt
-Login
-  -> NextAuth GitHub OAuth
-  -> JWT session + Prisma user/account storage
-  -> middleware-protected app/API routes
-  -> Dashboard
-Analyze form
-  -> POST /api/analyze
-  -> authenticated user lookup
-  -> Zod validation
-  -> user-owned Prisma report record: pending
-  -> Prisma AnalysisJob record with encrypted job-scoped OpenAI credential
-  -> BullMQ Redis queue
-  -> SSE progress subscription
-Analysis worker
-  -> atomic job/report transition: pending -> running
-  -> GitHub parser + repo metadata/tree fetch
-  -> file candidate selection
-  -> bounded raw content fetch
-  -> persisted step-level progress and timestamps
-  -> OpenAI AIProvider adapter
-  -> AgentPipeline
-       FileClassifierAgent
-       ArchitectureAgent
-       SecurityAgent
-       PerformanceAgent
-       TestingAgent
-       ReportSynthesisAgent
-  -> Prisma report + findings persistence
-  -> atomic job/report transition: completed/failed
-  -> /reports/[reportId]
-```
+1. Install dependencies.
 
-OpenAI SDK usage is isolated to:
+   ```bash
+   pnpm install
+   ```
 
-```txt
-src/lib/ai/providers/OpenAIProvider.ts
-```
-
-Agents depend only on:
-
-```txt
-src/lib/ai/providers/AIProvider.ts
-```
+2. Create local environment configuration from the example file and set the required values.
 
-Adding another model provider later should require deliberate reintroduction of:
+   ```bash
+   cp .env.example .env.local
+   ```
 
-- new provider adapter
-- provider selection in the request schema
-- provider selector UI
+   Required configuration:
 
-## Cost and Safety Limits
+   ```env
+   DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
+   REDIS_URL="redis://localhost:6379"
+   NEXT_PUBLIC_APP_URL="http://localhost:3000"
+   NEXTAUTH_URL="http://localhost:3000"
+   NEXTAUTH_SECRET="generate-a-random-secret"
+   ANALYSIS_JOB_SECRET="generate-at-least-32-characters"
+   GITHUB_CLIENT_ID=""
+   GITHUB_CLIENT_SECRET=""
+   ```
 
-Configured in `src/lib/ai/tokenBudget.ts`:
+   Optional configuration is documented in [.env.example](.env.example), including queue tuning, `GITHUB_TOKEN`, and `OPENAI_MODEL`.
 
-```ts
-export const REPO_ANALYSIS_LIMITS = {
-  MAX_FILES_TO_FETCH: 80,
-  MAX_FILE_SIZE_BYTES: 80_000,
-  MAX_TOTAL_CHARS: 300_000,
-  MAX_FINDINGS: 25,
-  MAX_AGENT_STEPS: 6,
-};
-```
+3. Configure the GitHub OAuth application's local callback URL.
 
-RepoVitals selects important files before fetching content, ignores generated/binary/lock/build paths, and stores selected file metadata, hashes, and snippets rather than full raw source files.
+   ```text
+   http://localhost:3000/api/auth/callback/github
+   ```
 
-## API Contracts
+   The configured GitHub authorization request asks for `read:user` and `repo` scopes.
 
-`POST /api/analyze`
+4. Generate the Prisma client and apply migrations to PostgreSQL.
 
-Requires an authenticated session.
+   ```bash
+   pnpm prisma generate
+   pnpm prisma migrate dev
+   ```
 
-Request:
+5. Start Redis.
 
-```json
-{
-  "apiKey": "sk-...",
-  "repoUrl": "owner/repo"
-}
-```
+   ```bash
+   pnpm redis:up
+   ```
 
-Success:
+6. Start the Next.js development server and analysis worker together.
 
-```json
-{
-  "jobId": "...",
-  "reportId": "...",
-  "status": "pending"
-}
-```
+   ```bash
+   pnpm dev
+   ```
 
-Error:
+7. Open `http://localhost:3000`.
 
-```json
-{
-  "error": {
-    "code": "INVALID_GITHUB_URL",
-    "message": "Enter a valid GitHub repository URL or owner/repo path."
-  },
-  "reportId": "..."
-}
-```
+`pnpm dev` runs both the web process and `src/workers/analysisWorker.ts`. To operate them separately, use `pnpm dev:web` and `pnpm dev:worker`.
 
-`GET /api/analyze/jobs/[jobId]/events`
+## Authentication and Credential Handling
 
-Requires an authenticated session. Streams Server-Sent Events for persisted job progress.
+- GitHub sign-in gates `/analyze`, `/dashboard`, report pages, and analysis/report API routes.
+- Analysis requires an OpenAI API key supplied through the browser for that run.
+- Based on the implementation, the submitted OpenAI key is encrypted with AES-256-GCM and stored in the queued `AnalysisJob` record while the job needs it.
+- The encrypted analysis credential is cleared when a job completes, fails, cannot be queued, or is cancelled.
+- Do not place a user's per-analysis OpenAI key in screenshots, committed configuration, logs, or documentation.
 
-`POST /api/analyze/jobs/[jobId]/cancel`
+## Usage Flow
 
-Requires an authenticated session. Cancels a pending or running job, clears its encrypted credential, and marks the report failed with a cancellation message.
+1. Open the landing page and select **Analyze a repository**.
+2. Sign in with GitHub and complete any GitHub authorization prompt.
+3. On the analysis page, choose or enter a GitHub repository and select the desired review scope.
+4. Supply an OpenAI API key for the run and submit the analysis.
+5. The implementation queues the job and exposes progress updates while the worker builds the report.
+6. Open the saved report from the dashboard to review scorecards, findings, the architecture diagram, recommendations, and agent trace.
 
-`GET /api/reports/[reportId]`
+## Commands
 
-Requires an authenticated session. Returns a persisted report only when it belongs to the signed-in user.
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Run the development web application and worker together |
+| `pnpm dev:web` | Run only the Next.js development server |
+| `pnpm dev:worker` | Run only the development analysis worker |
+| `pnpm redis:up` | Start the local Redis Docker Compose service |
+| `pnpm build` | Build the production Next.js application |
+| `pnpm start` | Start the built Next.js application |
+| `pnpm worker` | Run the analysis worker outside the combined dev command |
+| `pnpm lint` | Run ESLint |
+| `pnpm test` | Run the Vitest suite once |
+| `pnpm test:watch` | Run Vitest in watch mode |
+| `pnpm prisma generate` | Generate Prisma Client |
+| `pnpm prisma migrate dev` | Apply development database migrations |
+| `pnpm prisma studio` | Open Prisma Studio |
 
-## Database
+## Current UI Copy Gaps
 
-Prisma models:
+- The live landing and login pages state that OpenAI API keys are never persisted or stored. The inspected implementation instead persists an encrypted, job-scoped credential until the job reaches a terminal state. The user-facing copy should be aligned with the implementation.
+- The landing-page example output says repository analysis is synchronous and awaiting queue migration. The inspected implementation already uses Redis/BullMQ queued jobs, a worker, and SSE progress updates.
 
-- `User`
-- `Account`
-- `Session`
-- `VerificationToken`
-- `Repository`
-- `AnalysisReport`
-- `AnalysisJob`
-- `AnalysisJobProgress`
-- `Finding`
+## Data Limits
 
-Important fields:
-
-- `AnalysisReport.status`: `pending | running | completed | failed`
-- `AnalysisJob.status`: `pending | running | completed | failed | cancelled`
-- `AnalysisJobProgress`: one row per workflow step with status and timestamps
-- `AnalysisReport.scorecardJson`
-- `AnalysisReport.recommendationsJson`
-- `AnalysisReport.agentTraceJson`
-- `AnalysisReport.selectedFilesJson`
-- `AnalysisReport.userId`: owner of the saved report
-
-Raw OpenAI keys are never persisted.
-
-## Tests
-
-Run:
-
-```bash
-pnpm test
-```
-
-Covered:
-
-- `parseGithubUrl`
-- `selectImportantFiles`
-- `redactApiKey`
-- analyze schema validation
-
-## Troubleshooting
-
-If Prisma cannot connect:
-
-- verify `DATABASE_URL`
-- verify the database accepts external connections
-- run `pnpm prisma generate`
-- run `pnpm prisma migrate dev --name init`
-
-If GitHub rate limits requests:
-
-- set `GITHUB_TOKEN` in `.env.local`
-- restart `pnpm dev`
-- use a smaller repository
-
-If OpenAI calls fail:
-
-- confirm the pasted key is an OpenAI key
-- confirm billing/rate limits on the OpenAI account
-- try a smaller public repository
-
-If `pnpm build` fails because the database is unavailable:
-
-- ensure `DATABASE_URL` is set before building
-- the report page is dynamic, but Prisma still needs a generated client
-
-## Worker Semantics
-
-- Jobs are queued in Redis through BullMQ.
-- Retries use exponential backoff from `ANALYSIS_JOB_ATTEMPTS` and `ANALYSIS_JOB_BACKOFF_MS`.
-- Timeouts are enforced with `ANALYSIS_JOB_TIMEOUT_MS` and abort signals passed into GitHub/OpenAI calls.
-- Final non-cancelled failures are copied to the `analysis.dead` dead-letter queue and kept failed in BullMQ.
-- Report transitions are guarded so completed reports are not overwritten by later failure paths.
-
-## Deployment Notes
-
-For Vercel:
-
-1. Add `DATABASE_URL`.
-2. Add `REDIS_URL`.
-3. Add `NEXTAUTH_URL` using the deployed app URL.
-4. Add `NEXTAUTH_SECRET`.
-5. Add `ANALYSIS_JOB_SECRET`.
-6. Add GitHub OAuth credentials.
-7. Add optional `GITHUB_TOKEN`.
-8. Do not add user OpenAI keys as env vars for MVP.
-9. Run Prisma migration against the production database before demoing.
-10. Run at least one long-lived `pnpm worker` process beside the Next.js app.
-
-## Roadmap
-
-Next phases:
-
-- deterministic scanner improvements
-- saved report sharing controls
-- background jobs
-- GitHub OAuth/App for private repos
-- GitHub issue creation
-- PR suggestions with human approval
-- CI/PR review bot
-- Anthropic/Gemini/local provider adapters
-- team/workspace mode
+The standard and expanded review limits are configured in `src/lib/ai/tokenBudget.ts`.
+
+| Limit | Standard | Expanded |
+| --- | ---: | ---: |
+| Files fetched | 80 | 140 |
+| Maximum bytes per file | 80,000 | 140,000 |
+| Total characters provided for analysis | 300,000 | 450,000 |
+| Findings | 25 | 40 |
+| Agent steps | 6 | 6 |
+
+RepoVitals selects bounded source content before invoking its analysis agents and stores report artifacts, selected-file metadata, progress records, and findings in PostgreSQL.
