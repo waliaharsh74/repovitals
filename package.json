@@ -8,7 +8,7 @@
     "dev:web": "next dev",
     "dev:worker": "tsx src/workers/analysisWorker.ts",
     "redis:up": "docker compose up -d redis",
-    "build": "next build",
+    "build": "npx prisma generate && next build",
     "start": "next start",
     "worker": "tsx src/workers/analysisWorker.ts",
     "lint": "eslint .",
