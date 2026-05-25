@@ -159,10 +159,10 @@ The completed report turns repository structure into an architecture diagram and
 | `pnpm prisma migrate dev` | Apply development database migrations |
 | `pnpm prisma studio` | Open Prisma Studio |
 
-## Current UI Copy Gaps
+## UI Copy Status
 
-- The live landing and login pages state that OpenAI API keys are never persisted or stored. The inspected implementation instead persists an encrypted, job-scoped credential until the job reaches a terminal state. The user-facing copy should be aligned with the implementation.
-- The landing-page example output says repository analysis is synchronous and awaiting queue migration. The inspected implementation already uses Redis/BullMQ queued jobs, a worker, and SSE progress updates.
+- The landing and login pages describe OpenAI API keys as encrypted for the queued analysis run and cleared at a terminal job state.
+- The landing-page example output describes Redis/BullMQ queued jobs and SSE progress updates.
 
 ## Data Limits
 

@@ -74,7 +74,10 @@ export default async function LoginPage({
           <LoginButtons callbackUrl={callbackUrl} />
           <div className="flex gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-            <p>OpenAI API keys are still used only for a single analysis run and are never stored.</p>
+            <p>
+              OpenAI API keys are encrypted for the queued analysis run and cleared when the job reaches
+              a terminal state.
+            </p>
           </div>
         </CardContent>
       </Card>

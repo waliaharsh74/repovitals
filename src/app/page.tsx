@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 const previewFindings = [
-  { severity: "high", text: "API route validates OpenAI keys but does not persist them." },
-  { severity: "medium", text: "Repository analysis is synchronous and isolated for future queue migration." },
+  { severity: "high", text: "OpenAI keys are encrypted for queued jobs and cleared at terminal state." },
+  { severity: "medium", text: "Repository analysis runs through Redis/BullMQ with SSE progress updates." },
   { severity: "low", text: "Selected files are stored as metadata and snippets only." },
 ];
 
@@ -74,7 +74,11 @@ export default function HomePage() {
         {[
           { icon: GitBranch, title: "GitHub ingestion", text: "Fetches public repo metadata, tree, and bounded file contents." },
           { icon: BrainCircuit, title: "Composable agents", text: "Specialized reviewers produce structured findings and recommendations." },
-          { icon: ShieldCheck, title: "Key-safe MVP", text: "OpenAI keys are accepted per run and never persisted." },
+          {
+            icon: ShieldCheck,
+            title: "Key-safe MVP",
+            text: "OpenAI keys are encrypted for the queued run and cleared when the job finishes.",
+          },
           { icon: Database, title: "Shareable reports", text: "Postgres stores reports, findings, trace, and selected file metadata." },
         ].map((item) => (
           <Card key={item.title}>
